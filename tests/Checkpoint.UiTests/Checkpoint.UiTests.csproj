@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms></PropertyGroup><ItemGroup><ProjectReference Include="../../src/Checkpoint.App/Checkpoint.App.csproj" /></ItemGroup></Project>
