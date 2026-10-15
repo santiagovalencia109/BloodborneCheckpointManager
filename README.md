@@ -10,7 +10,7 @@ Version 0.8.3 has been tested with **Supermedo 1.8.1**.
 
 ## Getting started
 
-You need the .NET Desktop Runtime 8 x64. Extract the entire package and open `BloodborneCheckpointManager.exe`.
+Download the `-windows.zip` package from [Releases](https://github.com/santiagovalencia109/BloodborneCheckpointManager/releases). You need the .NET Desktop Runtime 8 x64. Extract the entire package and open `BloodborneCheckpointManager.exe`.
 
 In **Settings**:
 
@@ -53,4 +53,4 @@ See the documentation for [build instructions](docs/EXTERNAL_BRIDGE_USAGE.md#bui
 
 Open `BloodborneCheckpointManager.sln` in Visual Studio, or use the .NET SDK. The application is in `src/`, the native bridge in `native/`, and tests in `tests/`.
 
-The `-windows.zip` package contains the ready-to-run app. The `-source.zip` package contains the project. Both are in `artifacts/releases/0.8.3-experimental/`. See [project layout](docs/PROJECT_LAYOUT.md) for the folder structure.
+The `-windows.zip` package contains the ready-to-run app. The `-source.zip` package contains the project. Both are available in [Releases](https://github.com/santiagovalencia109/BloodborneCheckpointManager/releases). Local builds go in `artifacts/`, which is excluded from Git. See [project layout](docs/PROJECT_LAYOUT.md) for the folder structure.
