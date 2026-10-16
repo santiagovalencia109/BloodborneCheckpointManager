@@ -17,6 +17,10 @@ public sealed class MainForm : Form
     private readonly Button recoverButton=Theme.Button("");
     private readonly Label recoveryState=new() { AutoSize=true,ForeColor=Theme.Gold,MaximumSize=new Size(760,0) };
     private bool changingConnectionMode;
+    private readonly ComboBox portPicker=new() { DropDownStyle=ComboBoxStyle.DropDownList,FlatStyle=FlatStyle.Flat,Dock=DockStyle.Fill,BackColor=Theme.Input,ForeColor=Theme.Text };
+    private PortProfiles portProfiles=new();
+    private string selectedPort=Ports.Supermedo;
+    private bool changingPort;
     private bool? pendingRecovery;
     private CheckpointPicker? picker;
     private Button? renameButton,restoreButton,deleteButton;
@@ -109,11 +113,21 @@ public sealed class MainForm : Form
             var path=Path.Combine(appData,"settings.json");
             if (File.Exists(path))
             {
-                var p=JsonDisk.Read<Profile>(path).ForSupportedManagerMode(); executable.Text=p.Executable; saves.Text=p.Saves; library.Text=p.Library; aliases.Text=p.ExtraProcessNames;
-                launch.Text=p.LaunchPath; arguments.Text=p.LaunchArguments; working.Text=p.WorkingDirectory; restart.Checked=p.RestartAfterRestore; closeWindow.Checked=p.RequestWindowClose; live.Checked=p.LiveCheckpoints; external.Checked=p.ExternalBridge;
+                portProfiles=PortProfiles.Load(appData);
+                LoadProfile(JsonDisk.Read<Profile>(path).ForSupportedManagerMode());
             }
         }
         catch(Exception ex) { status.Text=TextCatalog.T("ui.settings_load",ex.Message); }
+        changingPort=true; portPicker.SelectedIndex=Array.IndexOf(Ports.All,selectedPort); changingPort=false;
+        portPicker.SelectedIndexChanged+=async(_,_)=>
+        {
+            if(changingPort || portPicker.SelectedIndex<0) return;
+            portProfiles.Profiles[selectedPort]=Current();
+            LoadProfile(portProfiles.Get(Ports.All[portPicker.SelectedIndex],appData));
+            pendingRecovery=null; manifests=[]; nextSelection=null; name.Clear(); watchedPid=0; RenderList(); UpdateRecovery(); ApplyLanguage();
+            if(!preview && Directory.Exists(saves.Text)) await RefreshLibrary();
+            else status.Text=TextCatalog.T("ui.configure");
+        };
         changingConnectionMode=true; connectionMode.SelectedIndex=live.Checked ? 1 : 0; changingConnectionMode=false;
         connectionMode.SelectedIndexChanged+=(_,_)=>
         {
@@ -157,11 +171,19 @@ public sealed class MainForm : Form
         UpdateMode(); RenderList(); LayoutLibraryActions(); tabs.Invalidate();
         var modeIndex=connectionMode.SelectedIndex;
         changingConnectionMode=true; connectionMode.Items.Clear();
-        foreach(var key in new[]{"settings.mode_offline","settings.mode_external"}) connectionMode.Items.Add(TextCatalog.T(key));
+        foreach(var key in new[]{"settings.mode_offline",selectedPort==Ports.Awaken ? "settings.mode_awaken" : "settings.mode_external"}) connectionMode.Items.Add(TextCatalog.T(key));
         connectionMode.SelectedIndex=Math.Clamp(modeIndex,0,1); changingConnectionMode=false;
         recoverButton.Text=TextCatalog.T("recovery.button"); UpdateRecovery(); picker?.ApplyLanguage(); UpdateShortcutHint();
     }
-    private void UpdateMode()=>mode.Text=TextCatalog.T(live.Checked ? "mode.external" : "mode.offline");
+    private void LoadProfile(Profile p)
+    {
+        Ports.Validate(p.Port); selectedPort=p.Port;
+        executable.Text=p.Executable; saves.Text=p.Saves; library.Text=p.Library; aliases.Text=p.ExtraProcessNames;
+        launch.Text=p.LaunchPath; arguments.Text=p.LaunchArguments; working.Text=p.WorkingDirectory;
+        restart.Checked=p.RestartAfterRestore; closeWindow.Checked=p.RequestWindowClose; live.Checked=p.LiveCheckpoints; external.Checked=p.ExternalBridge;
+        changingConnectionMode=true; connectionMode.SelectedIndex=p.LiveCheckpoints ? 1 : 0; changingConnectionMode=false;
+    }
+    private void UpdateMode()=>mode.Text=TextCatalog.T(!live.Checked ? "mode.offline" : selectedPort==Ports.Awaken ? "mode.awaken" : "mode.external");
     private void UpdateSelection()
     {
         int count=list.SelectedItems.Count;
@@ -197,16 +219,17 @@ public sealed class MainForm : Form
     {
         var page=Page("nav.settings"); var layout=new TableLayoutPanel { Dock=DockStyle.Top, AutoSize=true, ColumnCount=1, RowCount=2 };
         var heading=PageHeading("settings.title","settings.subtitle"); heading.Height=62; layout.Controls.Add(heading,0,0); layout.RowStyles.Add(new RowStyle(SizeType.Absolute,62));
-        var fields=new TableLayoutPanel { Dock=DockStyle.Top, AutoSize=true, ColumnCount=3, RowCount=7 };
+        var fields=new TableLayoutPanel { Dock=DockStyle.Top, AutoSize=true, ColumnCount=3, RowCount=8 };
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,170)); fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100)); fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,122));
-        AddField(fields,0,"settings.executable",executable,"exe"); AddField(fields,1,"settings.saves",saves,"folder"); AddField(fields,2,"settings.library",library,"folder");
-        var note=Caption("settings.paths_note"); note.MaximumSize=new Size(740,0); note.Margin=new Padding(0,8,0,8); fields.Controls.Add(note,0,3); fields.SetColumnSpan(note,3);
-        fields.Controls.Add(Caption("settings.connection"),0,4); connectionMode.Margin=new Padding(0,0,14,8); fields.Controls.Add(connectionMode,1,4); fields.SetColumnSpan(connectionMode,2);
+        fields.Controls.Add(Caption("settings.port"),0,0); portPicker.Margin=new Padding(0,8,14,8); portPicker.Items.AddRange(["Supermedo","Awaken · BloodBorneButPc"]); fields.Controls.Add(portPicker,1,0); fields.SetColumnSpan(portPicker,2);
+        AddField(fields,1,"settings.executable",executable,"exe"); AddField(fields,2,"settings.saves",saves,"folder"); AddField(fields,3,"settings.library",library,"folder");
+        var note=Caption("settings.paths_note"); note.MaximumSize=new Size(740,0); note.Margin=new Padding(0,8,0,8); fields.Controls.Add(note,0,4); fields.SetColumnSpan(note,3);
+        fields.Controls.Add(Caption("settings.connection"),0,5); connectionMode.Margin=new Padding(0,0,14,8); fields.Controls.Add(connectionMode,1,5); fields.SetColumnSpan(connectionMode,2);
         foreach(var key in new[]{"settings.mode_offline","settings.mode_external"}) connectionMode.Items.Add(TextCatalog.T(key)); connectionMode.SelectedIndex=0;
-        var startNote=Caption("settings.start_note"); startNote.MaximumSize=new Size(740,0); startNote.Margin=new Padding(0,8,0,8); fields.Controls.Add(startNote,0,5); fields.SetColumnSpan(startNote,3);
+        var startNote=Caption("settings.start_note"); startNote.MaximumSize=new Size(740,0); startNote.Margin=new Padding(0,8,0,8); fields.Controls.Add(startNote,0,6); fields.SetColumnSpan(startNote,3);
         var actions=new FlowLayoutPanel { AutoSize=true, Dock=DockStyle.Fill, WrapContents=false };
         actions.Controls.Add(Button("settings.save",SaveSettings,true));
-        fields.Controls.Add(actions,1,6); fields.SetColumnSpan(actions,2);
+        fields.Controls.Add(actions,1,7); fields.SetColumnSpan(actions,2);
         layout.Controls.Add(fields,0,1); page.Controls.Add(layout);
     }
     private void BuildRecovery()
@@ -223,20 +246,38 @@ public sealed class MainForm : Form
         if(kind=="none") return;
         panel.Controls.Add(Button("settings.browse",()=>
         {
+            var directory=BrowseDirectory(box.Text);
             if(kind!="folder")
             {
-                using var dialog=new OpenFileDialog { Title=TextCatalog.T(key), Filter=TextCatalog.T(kind=="exe" ? "settings.exe_filter" : "settings.launch_filter") };
+                using var dialog=new OpenFileDialog { Title=TextCatalog.T(key), Filter=TextCatalog.T(kind=="exe" ? "settings.exe_filter" : "settings.launch_filter"), InitialDirectory=directory, RestoreDirectory=true };
+                if(File.Exists(box.Text.Trim())) dialog.FileName=box.Text.Trim();
                 if(dialog.ShowDialog(this)==DialogResult.OK) { box.Text=dialog.FileName; if(kind=="launch" && string.IsNullOrWhiteSpace(working.Text)) working.Text=Path.GetDirectoryName(dialog.FileName); }
             }
-            else { using var dialog=new FolderBrowserDialog { Description=TextCatalog.T(key), UseDescriptionForTitle=true }; if(dialog.ShowDialog(this)==DialogResult.OK) box.Text=dialog.SelectedPath; }
+            else { using var dialog=new FolderBrowserDialog { Description=TextCatalog.T(key), UseDescriptionForTitle=true, InitialDirectory=directory, SelectedPath=directory }; if(dialog.ShowDialog(this)==DialogResult.OK) box.Text=dialog.SelectedPath; }
             return Task.CompletedTask;
         }),2,row);
+    }
+    private static string BrowseDirectory(string value)
+    {
+        var path=value.Trim();
+        try
+        {
+            if(Path.IsPathFullyQualified(path))
+                while(!string.IsNullOrEmpty(path))
+                {
+                    if(Directory.Exists(path)) return path;
+                    path=Path.GetDirectoryName(path);
+                }
+        }
+        catch(Exception ex) when(ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException) { }
+        var documents=Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        return Directory.Exists(documents) ? documents : AppContext.BaseDirectory;
     }
     private Button Button(string key,Func<Task> action,bool primary=false,bool danger=false)
     {
         var button=Theme.Button(TextCatalog.T(key),primary,danger); button.Tag=key; button.Click+=async(_,_)=>await action(); return button;
     }
-    private Profile Current() => new(executable.Text.Trim(), saves.Text.Trim(), library.Text.Trim(), aliases.Text.Trim(), launch.Text.Trim(), arguments.Text, working.Text.Trim(), restart.Checked, closeWindow.Checked, live.Checked, external.Checked);
+    private Profile Current() => new(executable.Text.Trim(), saves.Text.Trim(), library.Text.Trim(), aliases.Text.Trim(), launch.Text.Trim(), arguments.Text, working.Text.Trim(), restart.Checked, closeWindow.Checked, live.Checked, external.Checked,selectedPort);
     private async Task TogglePicker()
     {
         if(picker?.Visible==true) { picker.Hide(); return; }
@@ -251,24 +292,34 @@ public sealed class MainForm : Form
         recoveryState.Text=TextCatalog.T(pendingRecovery==true ? "recovery.pending" : pendingRecovery==false ? "recovery.none" : "recovery.unknown");
         recoverButton.Enabled=pendingRecovery==true && !busy;
     }
-    private static string ExternalStatus(System.Text.Json.JsonElement hello) => TextCatalog.T(
+    private string ExternalStatus(System.Text.Json.JsonElement hello) => TextCatalog.T(
         hello.TryGetProperty("stage",out var stage) && stage.GetString()=="startup" ? "external.initializing" :
-        hello.GetProperty("capture").GetBoolean() ? "external.live_connected" : "external.connected");
+        hello.GetProperty("capture").GetBoolean() ? selectedPort==Ports.Awaken ? "external.awaken_connected" : "external.live_connected" : "external.connected");
     private async Task WatchExternal()
     {
-        if (preview || busy || checkingExternal || !external.Checked || !live.Checked) return;
+        if (preview || busy || checkingExternal || portPicker.DroppedDown || !external.Checked || !live.Checked) return;
         checkingExternal=true;
         try
         {
             var full=DateTime.UtcNow-lastFullDiscovery>TimeSpan.FromSeconds(2);
             if (full) lastFullDiscovery=DateTime.UtcNow;
             var hints=new[] { "bb-probe", "bbport", Path.GetFileNameWithoutExtension(executable.Text.Trim()) };
-            var games=await Task.Run(()=>ExternalBridge.Discover(full ? null : hints));
+            var profile=Current();
+            var games=await Task.Run(()=>ExternalBridge.Discover(full ? null : hints,profile.Port));
+            // Discovery runs in the background without changing the selector's state.
+            // Discard results if the user edited settings or opened the dropdown meanwhile.
+            if(IsDisposed || busy || prompting || portPicker.DroppedDown || profile!=Current()) return;
             if (games.Length!=1) { if (games.Length==0) watchedPid=0; return; }
             if (games[0].Pid==watchedPid) return;
-            using var bridge=await LiveBridgeClient.ConnectAsync(Current(),CancellationToken.None,observationOnly:true);
-            if (!bridge.Greeting.TryGetProperty("stage",out var stage) || stage.GetString()!="startup") watchedPid=games[0].Pid;
-            if (!busy && !IsDisposed) { var message=ExternalStatus(bridge.Greeting); if (status.Text!=message) { status.Text=message; Log(message); Log("Game connection details: "+bridge.Greeting.GetRawText()); } }
+            // Lock port changes only during an actual attachment, never on every timer tick.
+            portPicker.Enabled=false;
+            try
+            {
+                using var bridge=await LiveBridgeClient.ConnectAsync(profile,CancellationToken.None,observationOnly:true);
+                if (!bridge.Greeting.TryGetProperty("stage",out var stage) || stage.GetString()!="startup") watchedPid=games[0].Pid;
+                if (!busy && !IsDisposed) { var message=ExternalStatus(bridge.Greeting); if (status.Text!=message) { status.Text=message; Log(message); Log("Game connection details: "+bridge.Greeting.GetRawText()); } }
+            }
+            finally { if(!IsDisposed) portPicker.Enabled=true; }
         }
         catch (Exception ex)
         {
@@ -276,7 +327,7 @@ public sealed class MainForm : Form
             // remote call must never be retried automatically on that instance.
             if (ex is ExternalAttachException { Code: -1 or -2 })
             {
-                var games=ExternalBridge.Discover();
+                var games=ExternalBridge.Discover(port:selectedPort);
                 if (games.Length==1) watchedPid=games[0].Pid;
             }
             if (!busy && !IsDisposed) status.Text=TextCatalog.T("external.watch_error",ex.Message);
@@ -319,7 +370,8 @@ public sealed class MainForm : Form
         _ = Store(p); if (!File.Exists(p.Executable) || !Path.GetExtension(p.Executable).Equals(".exe", StringComparison.OrdinalIgnoreCase)) throw new IOException(TextCatalog.T("ui.executable_missing"));
         if (!Directory.Exists(p.Saves)) throw new IOException(TextCatalog.T("ui.saves_missing"));
         if (!p.LiveCheckpoints && p.RestartAfterRestore) new WindowsGameLifecycle().ValidateLaunch(p);
-        JsonDisk.Write(Path.Combine(appData, "settings.json"), p); return TextCatalog.T("ui.settings_saved");
+        if(p.LiveCheckpoints) _=ExternalBridge.ResolveRuntime(p.Executable,p.Port);
+        portProfiles.Save(appData,p); return TextCatalog.T("ui.settings_saved");
     });
     private Task Create()
     {

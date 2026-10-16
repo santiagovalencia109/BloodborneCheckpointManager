@@ -130,7 +130,7 @@
     "library.selected": "Seleccionado: {0}",
     "library.no_selection": "Selecciona un checkpoint. Usa Ctrl o Mayús para seleccionar varios y borrarlos.",
     "settings.title": "Configura tu juego",
-    "settings.subtitle": "Un perfil. Rutas claras. Restauraciones seguras.",
+    "settings.subtitle": "Elige el port y configura sus carpetas.",
     "settings.executable": "Ejecutable del juego",
     "settings.saves": "Carpeta de saves",
     "settings.library": "Biblioteca de copias",
@@ -181,8 +181,8 @@
     "library.size_mb": "{0:N1} MB",
     "external.option": "Puente externo Supermedo (experimental; abre el manager antes del juego)",
     "external.connect": "Conectar al juego abierto",
-    "external.enable": "Selecciona primero el modo en vivo de Supermedo.",
-    "external.connecting": "Conectando con Supermedo…",
+    "external.enable": "Selecciona el modo en vivo primero.",
+    "external.connecting": "Conectando con el juego…",
     "external.initializing": "Esperando a que el juego termine de arrancar…",
     "external.connected": "Reinicia el juego con el manager abierto para usar el modo en vivo.",
     "external.live_connected": "Modo en vivo listo. F5 guarda · F9 restaura · F11 abre el selector.",
@@ -234,6 +234,10 @@
     "ui.delete_many_title": "Borrar checkpoints",
     "ui.delete_partial": "Se borraron {0} de {1} checkpoints. No se pudo terminar: {2}",
     "ui.delete_cleanup": "Se quitaron {0} checkpoints de la lista. Quedan archivos bloqueados de {1} copias; consulta manager.log.",
-    "ui.deleted_many": "Se borraron {0} checkpoints."
+    "ui.deleted_many": "Se borraron {0} checkpoints.",
+    "mode.awaken": "Modo en vivo de Awaken",
+    "settings.port": "Port del juego",
+    "external.awaken_connected": "Modo en vivo de Awaken listo. F5 guarda · F9 restaura · F11 abre el selector.",
+    "settings.mode_awaken": "Modo en vivo de Awaken"
   }
 }

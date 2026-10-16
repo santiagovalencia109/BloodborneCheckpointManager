@@ -6,7 +6,7 @@ namespace Checkpoint.Core;
 public sealed record Profile(string Executable, string Saves, string Library, string ExtraProcessNames = "",
     string LaunchPath = "", string LaunchArguments = "", string WorkingDirectory = "",
     bool RestartAfterRestore = false, bool RequestWindowClose = false, bool LiveCheckpoints = false,
-    bool ExternalBridge = false)
+    bool ExternalBridge = false, string Port = Ports.Supermedo)
 {
     public Profile ForSupportedManagerMode()=>this with { ExternalBridge=LiveCheckpoints };
 }
@@ -41,7 +41,7 @@ public sealed class ProcessGuard : IGameGuard
     public void EnsureNoOtherGames(Profile profile, int? allowedProcessId)
     {
         if (profile.ExternalBridge)
-            foreach (var game in ExternalBridge.Discover())
+            foreach (var game in Ports.All.SelectMany(port=>ExternalBridge.Discover(port:port)))
                 if (game.Pid != allowedProcessId) throw new GameRunningException(TextCatalog.T("error.running", Path.GetFileNameWithoutExtension(game.Executable), game.Pid));
         if (!File.Exists(profile.Executable) || !string.Equals(Path.GetExtension(profile.Executable), ".exe", StringComparison.OrdinalIgnoreCase))
             throw new IOException(TextCatalog.T("error.executable"));

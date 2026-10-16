@@ -2,9 +2,9 @@
 
 Create checkpoints of your save and return to them whenever you want to retry a fight or recover your saved progress and consumables.
 
-**Currently supports only [Supermedo's port](https://github.com/Supermedo/bloodborne_pc), on Windows x64 in single-player mode.** Some port updates may require a manager update.
+Works with [Supermedo](https://github.com/Supermedo/bloodborne_pc) and [Awaken / BloodBorneButPc](https://github.com/Awakenchan/BloodBorneButPc), on Windows x64 in single-player mode. Some port updates may require a manager update.
 
-Version 0.8.4 is confirmed working by the user with **Supermedo 1.8.2**. Earlier 0.8.x versions were tested with 1.8.1.
+Supermedo 1.8.2 and Awaken 0.9.33 are confirmed working by the user. Awaken support remains experimental; see [Awaken support](docs/AWAKEN.md) for its current limits.
 
 ![Floating checkpoint picker while playing Bloodborne](docs/images/in-game-picker.png)
 
@@ -14,10 +14,11 @@ Download the `-windows.zip` package from [Releases](https://github.com/santiagov
 
 In **Settings**:
 
-1. Select the game executable: `bb-probe.exe`, not the launcher.
-2. Select the `savedata` folder used by your installation.
-3. Choose a separate folder for your checkpoints.
-4. Under **Checkpoint mode**, select **Supermedo Live Mode** and save your settings.
+1. Choose your **Game port** first. Each port keeps its own settings.
+2. Select the native `bb-probe.exe`, not the launcher. Awaken packages use `engine/out/bb-probe.exe`.
+3. Select the complete `savedata` folder used by your current player profile.
+4. Choose a separate checkpoint folder for this port.
+5. Select **Supermedo Live Mode** or **Awaken Live Mode**, then save your settings.
 
 Use **Closed Game Mode** if you want to manage checkpoints with the game closed.
 

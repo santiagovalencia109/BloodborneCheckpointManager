@@ -19,7 +19,7 @@ BloodborneCheckpointManager/
 
 ```text
 artifacts/
-  releases/0.8.4-experimental/
+  releases/0.9.2-experimental/
     windows/                 Ready-to-run app
     ...-windows.zip          App download
     ...-source.zip           Source project download
@@ -37,15 +37,15 @@ artifacts/
 
 The two test-data folders keep their original locations because checkpoint manifests and recovery records contain absolute paths. The native build cache also retains its path because CMake records it. These folders are development data and are not included in release ZIPs. The files synced under the workspace's `sources/` folder are reference material, not this project.
 
-`Abrir-manager-prueba.cmd` opens the current app using the isolated Supermedo test profile. It does not launch the game. For normal play, open the app in `releases/0.8.4-experimental/windows/` without that test shortcut.
+`Abrir-manager-prueba.cmd` opens the current app using the isolated Supermedo test profile. It does not launch the game. For normal play, open the app in `releases/0.9.2-experimental/windows/` without that test shortcut.
 
 ## Build and package
 
 See [native build instructions](EXTERNAL_BRIDGE_USAGE.md#build) for the required toolchain. Once the matching native bridge is built, publish from the project directory:
 
 ```powershell
-dotnet publish src/Checkpoint.App/Checkpoint.App.csproj -c Release -r win-x64 --self-contained false -o artifacts/releases/0.8.4-experimental/windows --no-restore
-./tools/package-external-release.ps1 -Version 0.8.4-experimental -Clang64Root 'YOUR_CLANG64_DIRECTORY'
+dotnet publish src/Checkpoint.App/Checkpoint.App.csproj -c Release -r win-x64 --self-contained false -o artifacts/releases/0.9.2-experimental/windows --no-restore
+./tools/package-external-release.ps1 -Version 0.9.2-experimental -Clang64Root 'YOUR_CLANG64_DIRECTORY'
 ```
 
 Packaging writes both ZIPs alongside the published app. The source ZIP contains the solution, source, tests, tools, documentation and license notices. It excludes compiled `bin/obj` folders, `artifacts`, saves and game assets; no duplicate extracted source folder is created.

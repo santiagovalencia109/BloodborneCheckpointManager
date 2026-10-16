@@ -137,6 +137,35 @@ Test("Older profiles keep external attachment disabled; explicit preference roun
     Assert(!JsonDisk.Read<Profile>(path).ExternalBridge);
     JsonDisk.Write(path,p with { ExternalBridge=true }); Assert(JsonDisk.Read<Profile>(path).ExternalBridge);
 });
+Test("Port profiles migrate legacy Supermedo settings without rewriting them", dir =>
+{
+    var p=Setup(dir) with { LiveCheckpoints=true,ExternalBridge=true };
+    var path=Path.Combine(dir,"settings.json"); JsonDisk.Write(path,p); var original=File.ReadAllBytes(path);
+    var profiles=PortProfiles.Load(dir); Assert(profiles.Get(Ports.Supermedo,dir)==p);
+    var awaken=profiles.Get(Ports.Awaken,dir);
+    Assert(awaken.Port==Ports.Awaken && awaken.Executable=="" && awaken.Saves=="" && awaken.Library!=p.Library);
+    Assert(File.ReadAllBytes(path).SequenceEqual(original));
+});
+Test("Port switching persists independent executables, saves and libraries", dir =>
+{
+    var super=Setup(dir); var profiles=new PortProfiles(); profiles.Save(dir,super);
+    var awaken=profiles.Get(Ports.Awaken,dir) with { Executable="awaken.exe",Saves="awaken-saves" };
+    profiles.Save(dir,awaken); var loaded=PortProfiles.Load(dir);
+    Assert(loaded.Get(Ports.Supermedo,dir)==super && loaded.Get(Ports.Awaken,dir)==awaken);
+    loaded.Save(dir,super); loaded=PortProfiles.Load(dir);
+    Assert(loaded.Get(Ports.Awaken,dir)==awaken && JsonDisk.Read<Profile>(Path.Combine(dir,"settings.json"))==super);
+});
+Test("Invalid port identities cannot select a bridge or overwrite profiles", dir =>
+{
+    Fails(()=>Ports.BridgeFile("unknown")); Fails(()=>new PortProfiles().Save(dir,new Profile("a","b","c",Port:"../supermedo")));
+    Assert(!File.Exists(Path.Combine(dir,"settings.json")));
+    Assert(Ports.BridgeFile(Ports.Awaken)!=Ports.BridgeFile(Ports.Supermedo));
+});
+Test("Awaken adapter cannot accept a renamed arbitrary executable", dir =>
+{
+    var path=Path.Combine(dir,"bb-probe.exe"); File.WriteAllBytes(path,[1,2,3]);
+    Fails(()=>ExternalBridge.ResolveRuntime(path,Ports.Awaken));
+});
 Test("Runtime fingerprint follows contents across rename and rejects altered content", dir =>
 {
     var first=Path.Combine(dir,"bb-probe.exe"); File.WriteAllBytes(first,[1,2,3,4]);

@@ -21,7 +21,7 @@ public static class ExternalBridge
     public const string SupportedHostSha256 = "4AE2D15EAFCE351C61DC10B8498B2BAD61CDC3A5C15C92E274FD63A7A4FC312A";
     private const uint Rights = 0x0002 | 0x0008 | 0x0010 | 0x0020 | 0x0400 | 0x100000;
     private static readonly ConcurrentDictionary<(int Pid, long Started), byte> uncertainCalls = new();
-    private static readonly ConcurrentDictionary<(string Path,long Length,long Modified),RuntimeResolution> resolvedFiles=new();
+    private static readonly ConcurrentDictionary<(string Port,string Path,long Length,long Modified),RuntimeResolution> resolvedFiles=new();
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool ReadProcessMemory(SafeProcessHandle process, IntPtr address, byte[] bytes, nuint count, out nuint read);
     [DllImport("kernel32.dll", SetLastError=true)] private static extern SafeProcessHandle OpenProcess(uint access, bool inherit, int pid);
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool IsWow64Process2(SafeProcessHandle process, out ushort machine, out ushort native);
@@ -40,8 +40,9 @@ public static class ExternalBridge
         return Convert.ToHexString(SHA256.HashData(file));
     }
 
-    public static ExternalGame[] Discover(string[]? names = null)
+    public static ExternalGame[] Discover(string[]? names = null,string port=Ports.Supermedo)
     {
+        Ports.Validate(port);
         if (!OperatingSystem.IsWindows()) return [];
         var matches = new List<ExternalGame>();
         var processes = Process.GetProcesses();
@@ -55,10 +56,10 @@ public static class ExternalBridge
                     if (process.HasExited || process.MainModule?.FileName is not { } executable) continue;
                     var known = new FileInfo(executable);
                     if (!RuntimeContract.HasSymbols(executable)) continue;
-                    var key=(executable,known.Length,known.LastWriteTimeUtc.Ticks);
+                    var key=(port,executable,known.Length,known.LastWriteTimeUtc.Ticks);
                     if (!resolvedFiles.TryGetValue(key,out var resolution))
                     {
-                        try { resolution=ResolveRuntime(executable); } catch(IOException) { resolution=new("incompatible","",[],[]); }
+                        try { resolution=ResolveRuntime(executable,port); } catch(IOException) { resolution=new("incompatible","",[],[]); }
                         resolvedFiles[key]=resolution;
                     }
                     if (resolution.Sha256.Length>0) matches.Add(new(process.Id, executable, resolution.Sha256));
@@ -77,12 +78,13 @@ public static class ExternalBridge
     {
         cancellation.ThrowIfCancellationRequested();
         if (!OperatingSystem.IsWindows() || !Environment.Is64BitProcess) throw new IOException(TextCatalog.T("external.x64"));
-        var matches = Discover();
+        Ports.Validate(profile.Port);
+        var matches = Discover(port:profile.Port);
         if (matches.Length != 1)
         {
             if(matches.Length==0 && File.Exists(profile.Executable))
             {
-                try { _=ResolveRuntime(profile.Executable); }
+                try { _=ResolveRuntime(profile.Executable,profile.Port); }
                 catch(IOException ex) { throw new IOException(TextCatalog.T("external.contract_failed",Path.GetFileName(profile.Executable),ex.Message),ex); }
             }
             throw new IOException(TextCatalog.T("external.single", matches.Length));
@@ -96,11 +98,11 @@ public static class ExternalBridge
         return await Task.Run(() =>
         {
             using var companion=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read);
-            if (Convert.ToHexString(SHA256.HashData(companion)) != ExternalBridgeIdentity.Sha256)
+            if (Convert.ToHexString(SHA256.HashData(companion)) != Ports.BridgeHash(profile.Port))
                 throw new IOException(TextCatalog.T("external.dll_changed"));
             // Keep the runtime file locked against replacement throughout validation and activation.
             using var runtimeFile=new FileStream(game.Executable,FileMode.Open,FileAccess.Read,FileShare.Read);
-            var resolution=ResolveRuntime(game.Executable);
+            var resolution=ResolveRuntime(game.Executable,profile.Port);
             if(resolution.Sha256!=game.HostSha256) throw new IOException(TextCatalog.T("external.runtime_changed"));
             using var process = Process.GetProcessById(game.Pid);
             var identity=(game.Pid,process.StartTime.ToUniversalTime().Ticks);
@@ -110,8 +112,8 @@ public static class ExternalBridge
             if (!IsWow64Process2(handle, out var machine, out var native) || machine != 0 || native != 0x8664)
                 throw new IOException(TextCatalog.T("external.x64"));
             var module = Module(process, path);
-            var existing=process.Modules.Cast<ProcessModule>().Where(m => string.Equals(Path.GetFileName(m.FileName),"bcm-external.dll",StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (existing.Any(m => Fingerprint(m.FileName)!=ExternalBridgeIdentity.Sha256))
+            var existing=process.Modules.Cast<ProcessModule>().Where(m => new[]{"bcm-external.dll","bcm-awaken.dll"}.Contains(Path.GetFileName(m.FileName),StringComparer.OrdinalIgnoreCase)).ToArray();
+            if (existing.Any(m => Fingerprint(m.FileName)!=Ports.BridgeHash(profile.Port)))
                 throw new ExternalAttachException(TextCatalog.T("external.restart_bridge"), -2);
             if (module==IntPtr.Zero && existing.Length==1) module=existing[0].BaseAddress;
             if (module == IntPtr.Zero)
@@ -143,8 +145,10 @@ public static class ExternalBridge
         }, cancellation).ConfigureAwait(false);
     }
 
-    public static RuntimeResolution ResolveRuntime(string executable)
+    public static RuntimeResolution ResolveRuntime(string executable,string port=Ports.Supermedo)
     {
+        Ports.Validate(port);
+        if(port==Ports.Awaken) return AwakenRuntime.Resolve(executable);
         var hash=Fingerprint(executable);
         if(hash==SupportedHostSha256) return new("supermedo-legacy-verified",hash,
             [0xc0cc88,0xc0cc90,0xc0cc94,0xc05040,0xc05030,0xc50f40,0x4f74a0,0x4f74d0,

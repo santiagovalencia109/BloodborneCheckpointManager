@@ -130,7 +130,7 @@
     "library.selected": "Selected: {0}",
     "library.no_selection": "Select a checkpoint. Use Ctrl or Shift to select several for deletion.",
     "settings.title": "Set up your game",
-    "settings.subtitle": "One profile. Clear paths. Safe restores.",
+    "settings.subtitle": "Choose your port, then set its folders.",
     "settings.executable": "Game executable",
     "settings.saves": "Save folder",
     "settings.library": "Checkpoint library",
@@ -181,8 +181,8 @@
     "library.size_mb": "{0:N1} MB",
     "external.option": "External Supermedo bridge (experimental; open manager before game)",
     "external.connect": "Connect to running game",
-    "external.enable": "Select Supermedo Live Mode first.",
-    "external.connecting": "Connecting to Supermedo…",
+    "external.enable": "Select Live Mode first.",
+    "external.connecting": "Connecting to the game…",
     "external.initializing": "Waiting for the game to finish starting…",
     "external.connected": "Restart the game with the manager open to use Live Mode.",
     "external.live_connected": "Supermedo Live Mode ready. F5 saves · F9 restores · F11 opens the picker.",
@@ -234,6 +234,10 @@
     "ui.delete_many_title": "Delete checkpoints",
     "ui.delete_partial": "Deleted {0} of {1} checkpoints. Could not finish: {2}",
     "ui.delete_cleanup": "Removed {0} checkpoints from the list. Files from {1} copies remain locked; see manager.log.",
-    "ui.deleted_many": "Deleted {0} checkpoints."
+    "ui.deleted_many": "Deleted {0} checkpoints.",
+    "mode.awaken": "Awaken Live Mode",
+    "settings.port": "Game port",
+    "external.awaken_connected": "Awaken Live Mode ready. F5 saves · F9 restores · F11 opens the picker.",
+    "settings.mode_awaken": "Awaken Live Mode"
   }
 }

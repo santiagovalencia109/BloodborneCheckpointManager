@@ -33,7 +33,7 @@ public sealed class LiveBridgeClient : IDisposable, IGameGuard
         if (!OperatingSystem.IsWindows()) throw new IOException(TextCatalog.T("bridge.windows"));
         if (profile.ExternalBridge)
         {
-            var game = await ExternalBridge.AttachAsync(profile, Path.Combine(AppContext.BaseDirectory, "Native", "bcm-external.dll"), cancellation).ConfigureAwait(false);
+            var game = await ExternalBridge.AttachAsync(profile, Path.Combine(AppContext.BaseDirectory, "Native", Ports.BridgeFile(profile.Port)), cancellation).ConfigureAwait(false);
             profile = profile with { Executable = game.Executable };
         }
         var processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(profile.Executable));

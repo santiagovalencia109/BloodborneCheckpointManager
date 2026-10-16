@@ -1,7 +1,8 @@
 using Checkpoint.Core;
-if(args.Length==2 && args[0]=="inspect-runtime")
+if(args.Length==2 && args[0]=="read-diagnostics") { ReadDiagnostics.Inspect(args[1]); return; }
+if(args.Length is 2 or 3 && args[0]=="inspect-runtime")
 {
-    try { var r=ExternalBridge.ResolveRuntime(args[1]); Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(r)); }
+    try { var r=ExternalBridge.ResolveRuntime(args[1],args.Length==3 ? args[2] : Ports.Supermedo); Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(r)); }
     catch(IOException error) { Console.Error.WriteLine("Runtime compatibility: "+error.Message); Environment.ExitCode=2; }
     return;
 }
