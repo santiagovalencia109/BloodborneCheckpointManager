@@ -4,7 +4,7 @@ Create checkpoints of your save and return to them whenever you want to retry a 
 
 Works with [Supermedo](https://github.com/Supermedo/bloodborne_pc) and [Awaken / BloodBorneButPc](https://github.com/Awakenchan/BloodBorneButPc), on Windows x64 in single-player mode. Some port updates may require a manager update.
 
-Supermedo 1.8.2 and Awaken 0.9.33 are confirmed working by the user. Awaken support remains experimental; see [Awaken support](docs/AWAKEN.md) for its current limits.
+Supermedo 1.8.2 and Awaken 0.9.33. Awaken support remains experimental; see [Awaken support](docs/AWAKEN.md) for its current limits.
 
 ![Floating checkpoint picker while playing Bloodborne](docs/images/in-game-picker.png)
 
