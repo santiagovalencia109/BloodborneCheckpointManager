@@ -45,7 +45,7 @@ From the project directory:
 dotnet restore src/Checkpoint.App/Checkpoint.App.csproj -r win-x64
 dotnet restore tests/Checkpoint.LiveProbe/Checkpoint.LiveProbe.csproj
 ./tools/build-external-bridge.ps1 -Clang64Bin 'YOUR_CLANG64_BIN_DIRECTORY'
-dotnet publish src/Checkpoint.App/Checkpoint.App.csproj -c Release -r win-x64 --self-contained false -o artifacts/releases/0.8.3-experimental/windows --no-restore
+dotnet publish src/Checkpoint.App/Checkpoint.App.csproj -c Release -r win-x64 --self-contained false -o artifacts/releases/0.8.4-experimental/windows --no-restore
 ```
 
 The native build script runs the callback ABI test, generates `ExternalBridgeIdentity.g.cs` from the actual DLL hash, builds the manager and live probe, and copies the DLL to their `Native` folders. Rebuilding a DLL independently requires updating that generated identity and rebuilding the .NET components. The complete source package includes the corresponding native source and third-party notices.

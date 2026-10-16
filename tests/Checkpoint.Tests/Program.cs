@@ -95,6 +95,39 @@ Test("Legacy prepared profiles migrate to supported Supermedo mode without chang
     Assert(profile.ForSupportedManagerMode()==(profile with { ExternalBridge=true }));
     Assert(!(profile with { LiveCheckpoints=false }).ForSupportedManagerMode().ExternalBridge);
 });
+Test("Public input ABI allows keyboard implementation changes while pinning save code", dir =>
+{
+    var fixture=AdaptiveFixture.Create(0x1000,0x3000,publicPadAbi:true);
+    var first=RuntimeContract.ResolveBytes(fixture.Bytes,fixture.Contract);
+    fixture.Bytes[0x280]=0x90;
+    Assert(RuntimeContract.ResolveBytes(fixture.Bytes,fixture.Contract).Code.Count==first.Code.Count);
+    fixture.Bytes[0x217]=0x90;
+    Fails(()=>RuntimeContract.ResolveBytes(fixture.Bytes,fixture.Contract));
+});
+Test("Public input ABI rejects missing exports, unknown layouts and uncovered save code", dir =>
+{
+    var fixture=AdaptiveFixture.Create(0x1000,0x3000,publicPadAbi:true);
+    var document=System.Text.Json.Nodes.JsonNode.Parse(fixture.Contract)!;
+    document["inputAbi"]="unknown";
+    Fails(()=>RuntimeContract.ResolveBytes(fixture.Bytes,document.ToJsonString()));
+    document["inputAbi"]="orbis-pad-120-v1";
+    document["patterns"]=new System.Text.Json.Nodes.JsonArray();
+    Fails(()=>RuntimeContract.ResolveBytes(fixture.Bytes,document.ToJsonString()));
+    document=System.Text.Json.Nodes.JsonNode.Parse(fixture.Contract)!;
+    document["tables"]!["pad"]!["names"]![0]="missing";
+    Fails(()=>RuntimeContract.ResolveBytes(fixture.Bytes,document.ToJsonString()));
+});
+Test("Public input export targets must be executable functions", dir =>
+{
+    var fixture=AdaptiveFixture.Create(0x1000,0x3000,publicPadAbi:true);
+    // Preserve the name and table agreement, but redirect the symbol to writable data.
+    int entry=fixture.SymbolOffset+10*18;
+    BitConverter.GetBytes(0x80u).CopyTo(fixture.Bytes,entry+8);
+    BitConverter.GetBytes((ushort)2).CopyTo(fixture.Bytes,entry+12);
+    BitConverter.GetBytes(0x140003080UL).CopyTo(fixture.Bytes,0x1548);
+    BitConverter.GetBytes(0x140003080UL).CopyTo(fixture.Bytes,0x1558);
+    Fails(()=>RuntimeContract.ResolveBytes(fixture.Bytes,fixture.Contract));
+});
 if(args.Contains("--contract-only")) { Console.WriteLine($"{passed} contract checks passed."); return; }
 
 Test("Older profiles keep external attachment disabled; explicit preference roundtrips", dir =>
@@ -526,7 +559,7 @@ sealed class FakeBridgeServer : IDisposable
 static class AdaptiveFixture
 {
     public sealed record Fixture(byte[] Bytes,string Contract,int SymbolOffset);
-    public static Fixture Create(uint codeRva,uint dataRva)
+    public static Fixture Create(uint codeRva,uint dataRva,bool publicPadAbi=false)
     {
         var bytes=new byte[0x92000];
         void U16(int at,ushort value)=>BitConverter.GetBytes(value).CopyTo(bytes,at);
@@ -544,6 +577,7 @@ static class AdaptiveFixture
             ("image",0,2,0),("gpu",8,2,0),("entered",12,2,0),("root",16,2,0),
             ("mutex",0x210,2,0),("files",0x400,2,0),("entry",0x10,1,32),
             ("filetab",0x300,2,0),("savetab",0x320,2,0),("padtab",0x340,2,0)};
+        if(publicPadAbi) { symbols.Add(("padimpl",0x80,1,32)); bytes[0x280]=0xc3; }
         const int symbolStart=0x91200; U32(0x8c,symbolStart); U32(0x90,(uint)symbols.Count);
         for(int n=0;n<symbols.Count;n++)
         { var s=symbols[n]; int at=symbolStart+n*18; Name(at,s.Name); U32(at+8,s.Value); U16(at+12,(ushort)s.Section); U16(at+14,s.Type); bytes[at+16]=s.Type==32 ? (byte)2 : (byte)3; }
@@ -554,7 +588,13 @@ static class AdaptiveFixture
         var body=bytes.AsSpan(0x210,8).ToArray(); for(int n=3;n<7;n++) body[n]=0;
         var tables=new Dictionary<string,object>(); int idx=0;
         foreach(var kind in new[]{"file","save","pad"}) { tables[kind]=new { symbol=kind+"tab#0",names=new[]{"export"+idx++},functions=new[]{"entry#0"} }; }
-        string contract=JsonSerializer.Serialize(new { schema=1,family="synthetic",layout,tables,patterns=new[]{new { symbol="entry#0",length=8,sha256=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(body)),masks=new[]{3,4,5,6},references=new[]{new { offset=3,next=7,symbol="image#0" }} }} });
+        if(publicPadAbi)
+        {
+            var names=new[]{"scePadRead","scePadReadState"};
+            for(int n=0;n<2;n++) { U64(0x1540+n*16,0x140000000UL+dataRva+0x500u+(uint)n*32); U64(0x1548+n*16,0x140000000UL+codeRva+0x80); Name(0x1700+n*32,names[n]); }
+            tables["pad"]=new { symbol="padtab#0",names,functions=new[]{"padimpl#0","padimpl#0"} };
+        }
+        string contract=JsonSerializer.Serialize(new { schema=publicPadAbi ? 2 : 1,inputAbi=publicPadAbi ? "orbis-pad-120-v1" : null,family="synthetic",layout,tables,patterns=new[]{new { symbol="entry#0",length=8,sha256=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(body)),masks=new[]{3,4,5,6},references=new[]{new { offset=3,next=7,symbol="image#0" }} }} });
         return new(bytes,contract,symbolStart);
     }
 }

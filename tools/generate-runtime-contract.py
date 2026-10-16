@@ -47,10 +47,10 @@ for s in groups['exports']:
     kind=next((k for k,v in [('file','sceKernelOpen'),('save','sceSaveDataInitialize'),('pad','scePadInit')] if names and names[0]==v),None)
     if kind:
         tables[kind]={'symbol':s['key'],'names':names,'functions':[byaddr[r][0]['key'] for r in targets]}
-        roots.update(targets)
+        if kind != 'pad': roots.update(targets)
 required=['runtime_file_mount','runtime_file_configure','runtime_file_user_dir','runtime_thread_attach_main','pthread_mutex_lock','pthread_mutex_unlock']
 helpers=['runtime_file_'+n for n in ['open','close','read','pread','write','lseek','stat','fstat','getdents']]
-scope=sorted(s['name'] for s in symbols if s['function'] and s['name'].startswith(('runtime_file_','runtime_savedata_','runtime_pad_')))
+scope=sorted(s['name'] for s in symbols if s['function'] and s['name'].startswith(('runtime_file_','runtime_savedata_')))
 roots.update(groups[n][0]['rva'] for n in required+helpers+scope)
 patterns=[]; visited=set()
 while roots:
@@ -90,6 +90,6 @@ mount=next(p for p in patterns if p['symbol']==groups['runtime_file_mount'][0]['
 locks={r['symbol'] for r in mount['references'] if r['symbol'].startswith('lock#')}
 if len(locks)!=1: raise ValueError('File lock is ambiguous')
 layout['file_lock']=locks.pop()
-out={'schema':1,'family':('supermedo-runtime-c-v1' if a.file_stride==0x218 else 'supermedo-runtime-c-atomic-v2'),'baselineSha256':hashlib.sha256(data).hexdigest().upper(),'fileRecord':{'stride':a.file_stride,'pathOffset':a.file_path_offset},'scope':scope,'layout':layout,'tables':tables,'patterns':sorted(patterns,key=lambda p:p['symbol'])}
+out={'schema':2,'inputAbi':'orbis-pad-120-v1','family':('supermedo-runtime-c-v1' if a.file_stride==0x218 else 'supermedo-runtime-c-atomic-v2'),'baselineSha256':hashlib.sha256(data).hexdigest().upper(),'fileRecord':{'stride':a.file_stride,'pathOffset':a.file_path_offset},'scope':scope,'layout':layout,'tables':tables,'patterns':sorted(patterns,key=lambda p:p['symbol'])}
 Path(a.output).parent.mkdir(parents=True,exist_ok=True); Path(a.output).write_text(json.dumps(out,separators=(',',':')),encoding='utf-8')
 print(f'Contract: {len(patterns)} critical function shapes; {len(tables)} export tables; no whole-executable identity requirement.')

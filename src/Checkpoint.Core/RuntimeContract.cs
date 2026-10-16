@@ -18,7 +18,7 @@ public static class RuntimeContract
     private sealed record Table(string Symbol,string[] Names,string[] Functions);
     private sealed record FileRecord(int Stride,int PathOffset);
     private sealed record Contract(int Schema,string Family,Dictionary<string,string> Layout,
-        Dictionary<string,Table> Tables,Pattern[] Patterns,string[]? Scope,FileRecord? FileRecord);
+        Dictionary<string,Table> Tables,Pattern[] Patterns,string[]? Scope,FileRecord? FileRecord,string? InputAbi);
     private sealed record Section(uint Rva,uint Size,uint Raw,uint RawSize,uint Flags);
     private sealed record Symbol(string Name,uint Rva,bool Function);
     private static readonly string[] Contracts=[ReadContract("BCM.runtime-contract.json"),ReadContract("BCM.runtime-contract.atomic.json")];
@@ -62,7 +62,8 @@ public static class RuntimeContract
     {
         var contract=JsonSerializer.Deserialize<Contract>(contractJson,new JsonSerializerOptions { PropertyNameCaseInsensitive=true })
             ?? throw new IOException("Missing runtime contract.");
-        if(contract.Schema!=1) throw new IOException("Unknown runtime contract schema.");
+        if(contract.Schema is not (1 or 2)) throw new IOException("Unknown runtime contract schema.");
+        if(contract.Schema==2 && contract.InputAbi!="orbis-pad-120-v1") throw new IOException("Unknown input ABI contract.");
         ushort U16(int p)=>BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(p,2));
         uint U32(int p)=>BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(p,4));
         ulong U64(int p)=>BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(p,8));
@@ -144,8 +145,21 @@ public static class RuntimeContract
         }
         if(contract.Scope!=null)
         {
-            var actual=symbols.Where(s=>s.Function && (s.Name.StartsWith("runtime_file_",StringComparison.Ordinal) || s.Name.StartsWith("runtime_savedata_",StringComparison.Ordinal) || s.Name.StartsWith("runtime_pad_",StringComparison.Ordinal))).Select(s=>s.Name).Order(StringComparer.Ordinal);
+            var actual=symbols.Where(s=>s.Function && (s.Name.StartsWith("runtime_file_",StringComparison.Ordinal) || s.Name.StartsWith("runtime_savedata_",StringComparison.Ordinal) || (contract.Schema==1 && s.Name.StartsWith("runtime_pad_",StringComparison.Ordinal)))).Select(s=>s.Name).Order(StringComparer.Ordinal);
             if(!actual.SequenceEqual(contract.Scope.Order(StringComparer.Ordinal))) throw new IOException("Runtime file/save/input interface changed.");
+        }
+        if(contract.Schema==2)
+        {
+            // File/save implementations and their reviewed helper graph remain pinned.
+            // Input is consumed through the game's fixed public Orbis ABI, not its keyboard parser.
+            var covered=contract.Patterns.Select(p=>p.Symbol).ToHashSet(StringComparer.Ordinal);
+            var required=contract.Tables["file"].Functions.Concat(contract.Tables["save"].Functions)
+                .Concat(contract.Layout.Values.Where(key=>Required(key).Function))
+                .Concat(symbols.Where(s=>s.Function && (s.Name.StartsWith("runtime_file_",StringComparison.Ordinal) || s.Name.StartsWith("runtime_savedata_",StringComparison.Ordinal))).Select(s=>s.Name+"#0"));
+            if(required.Any(key=>!covered.Contains(key))) throw new IOException("Incomplete save I/O code coverage.");
+            var inputTable=contract.Tables["pad"];
+            if(!inputTable.Names.Contains("scePadRead",StringComparer.Ordinal) || !inputTable.Names.Contains("scePadReadState",StringComparer.Ordinal))
+                throw new IOException("Missing public input ABI exports.");
         }
         var checks=new List<RuntimeCodeCheck>();
         foreach(var pattern in contract.Patterns)
@@ -176,6 +190,9 @@ public static class RuntimeContract
                 var nameRva=checked((uint)(U64(at+i*16)-imageBase)); var fnRva=checked((uint)(U64(at+i*16+8)-imageBase));
                 if(Z(FileOffset(nameRva,1),128)!=table.Names[i] || fnRva!=Required(table.Functions[i]).Rva)
                     throw new IOException("Runtime exports changed: "+name);
+                var function=Required(table.Functions[i]);
+                if(!function.Function || (Region(fnRva,1).Flags&0x20000000)==0)
+                    throw new IOException("Runtime export is not executable: "+name);
             }
             return(rva,(uint)table.Names.Length);
         }

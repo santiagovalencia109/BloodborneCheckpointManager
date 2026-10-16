@@ -4,7 +4,7 @@ Create checkpoints of your save and return to them whenever you want to retry a 
 
 **Currently supports only [Supermedo's port](https://github.com/Supermedo/bloodborne_pc), on Windows x64 in single-player mode.** Some port updates may require a manager update.
 
-Version 0.8.3 has been tested with **Supermedo 1.8.1**.
+Version 0.8.4 is confirmed working by the user with **Supermedo 1.8.2**. Earlier 0.8.x versions were tested with 1.8.1.
 
 ![Floating checkpoint picker while playing Bloodborne](docs/images/in-game-picker.png)
 
