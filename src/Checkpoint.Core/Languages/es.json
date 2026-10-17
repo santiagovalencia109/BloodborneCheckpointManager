@@ -183,6 +183,7 @@
     "external.connect": "Conectar al juego abierto",
     "external.enable": "Selecciona el modo en vivo primero.",
     "external.connecting": "Conectando con el juego…",
+    "external.connection_failed": "Falló la conexión de Live Mode: {0}.",
     "external.initializing": "Esperando a que el juego termine de arrancar…",
     "external.connected": "Reinicia el juego con el manager abierto para usar el modo en vivo.",
     "external.live_connected": "Modo en vivo listo. F5 guarda · F9 restaura · F11 abre el selector.",

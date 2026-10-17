@@ -26,7 +26,7 @@ def required(name):
     assert len(matches)==1,(name,len(matches))
     return matches[0][1]
 files=[s for s in symbols if s[0].startswith('files.llvm.')]; assert len(files)==1
-suffix=files[0][0][5:]; roots={required(n) for n in ['runtime_file_open','runtime_file_close','runtime_file_read','runtime_thread_attach_main','runtime_file_mount','runtime_file_configure']}
+suffix=files[0][0][5:]; roots={required(n) for n in ['runtime_file_open','runtime_file_close','runtime_file_read','runtime_thread_attach_main','runtime_file_mount','runtime_file_configure','_ZN8BbEngine12_GLOBAL__N_19FrameHookEyPKy']}
 tables={}
 for name,rva,fn in symbols:
     if not name.startswith('exports.llvm.'):continue

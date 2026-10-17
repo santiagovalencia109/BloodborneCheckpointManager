@@ -113,7 +113,7 @@ static Json Snapshot(const std::string& session) {
         {"adapter",Adapter},{"hostSha256",HostHash},{"guestVerified",guest},{"capture",ready},{"restore",ready},
         {"inputBarrier",ready},{"world",bool(world && player && sessionManager)},{"loading",loading},
         {"title",false},{"echoes",Field<int>(record,0x94,-1)},{"level",Field<int>(record,0x90,-1)},
-        {"stage",ready ? "experimental-live" : live.load() ? "startup" : "observer"},{"reason",ready ? "" : live.load() ? external::StartupStatus() : activationError}};
+        {"stage",ready ? "experimental-live" : live.load() && external::Starting() ? "startup" : "observer"},{"reason",ready ? "" : live.load() ? external::StartupStatus() : activationError}};
     if (ready) {
         const auto latest=external::Snapshot();
         state["world"]=latest.world; state["loading"]=latest.loading; state["title"]=latest.title;

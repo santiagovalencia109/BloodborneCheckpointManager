@@ -39,6 +39,7 @@ public sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer watcher=new() { Interval=100 };
     private bool checkingExternal;
     private int watchedPid;
+    private string lastConnectionDetails="";
     private DateTime lastFullDiscovery=DateTime.MinValue;
     private bool busy, prompting, changingLanguage;
     private CancellationTokenSource? cancellation;
@@ -66,6 +67,9 @@ public sealed class MainForm : Form
         var brand=new FlowLayoutPanel { Dock=DockStyle.Fill, FlowDirection=FlowDirection.TopDown, WrapContents=false };
         brand.Controls.Add(new Label { Text="BLOODBORNE", Font=new Font("Georgia",25), ForeColor=Theme.Gold, AutoSize=true, Margin=new Padding(0) });
         brand.Controls.Add(new Label { Text="CHECKPOINT MANAGER", Font=new Font("Segoe UI Semibold",11), AutoSize=true, Margin=new Padding(1,3,0,11) });
+        var buildVersion=System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(MainForm).Assembly)?.InformationalVersion.Split('+')[0]
+            ?? typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "";
+        brand.Controls.Add(new Label { Text="v"+buildVersion, Font=new Font("Segoe UI",9), ForeColor=Theme.Muted, AutoSize=true, Margin=new Padding(1,0,0,0) });
         header.Controls.Add(brand,0,0);
         var preferences=new FlowLayoutPanel { Dock=DockStyle.Fill, FlowDirection=FlowDirection.TopDown, WrapContents=false, Padding=new Padding(8,0,0,0) };
         preferences.Controls.Add(Caption("language.label")); preferences.Controls.Add(languagePicker); mode.Margin=new Padding(0,14,0,0); preferences.Controls.Add(mode); header.Controls.Add(preferences,1,0);
@@ -292,7 +296,9 @@ public sealed class MainForm : Form
         recoveryState.Text=TextCatalog.T(pendingRecovery==true ? "recovery.pending" : pendingRecovery==false ? "recovery.none" : "recovery.unknown");
         recoverButton.Enabled=pendingRecovery==true && !busy;
     }
-    private string ExternalStatus(System.Text.Json.JsonElement hello) => TextCatalog.T(
+    private string ExternalStatus(System.Text.Json.JsonElement hello) =>
+        selectedPort==Ports.Awaken && hello.TryGetProperty("stage",out var state) && state.GetString()=="observer" && hello.TryGetProperty("reason",out var reason) && !string.IsNullOrWhiteSpace(reason.GetString())
+            ? TextCatalog.T("external.connection_failed",reason.GetString()!) : TextCatalog.T(
         hello.TryGetProperty("stage",out var stage) && stage.GetString()=="startup" ? "external.initializing" :
         hello.GetProperty("capture").GetBoolean() ? selectedPort==Ports.Awaken ? "external.awaken_connected" : "external.live_connected" : "external.connected");
     private async Task WatchExternal()
@@ -317,7 +323,11 @@ public sealed class MainForm : Form
             {
                 using var bridge=await LiveBridgeClient.ConnectAsync(profile,CancellationToken.None,observationOnly:true);
                 if (!bridge.Greeting.TryGetProperty("stage",out var stage) || stage.GetString()!="startup") watchedPid=games[0].Pid;
-                if (!busy && !IsDisposed) { var message=ExternalStatus(bridge.Greeting); if (status.Text!=message) { status.Text=message; Log(message); Log("Game connection details: "+bridge.Greeting.GetRawText()); } }
+                var details=bridge.Greeting.GetRawText();
+                var diagnostic=games[0].Pid+":"+bridge.Greeting.GetProperty("capture").GetBoolean()+":"+
+                    (bridge.Greeting.TryGetProperty("reason",out var why) ? why.GetString() : "");
+                if(diagnostic!=lastConnectionDetails) { lastConnectionDetails=diagnostic; Log("Game connection details: "+details); }
+                if (!busy && !IsDisposed) { var message=ExternalStatus(bridge.Greeting); if (status.Text!=message) { status.Text=message; Log(message);  } }
             }
             finally { if(!IsDisposed) portPicker.Enabled=true; }
         }

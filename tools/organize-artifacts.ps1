@@ -1,5 +1,5 @@
 [CmdletBinding(SupportsShouldProcess=$true)]
-param([ValidatePattern('^\d+\.\d+\.\d+(?:-experimental)?$')][string]$CurrentVersion='0.9.2-experimental')
+param([ValidatePattern('^\d+\.\d+\.\d+(?:-experimental)?$')][string]$CurrentVersion='0.9.4-experimental')
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path -Parent $PSScriptRoot
 $artifactRoot=[IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts'))

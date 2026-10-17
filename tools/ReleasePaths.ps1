@@ -1,5 +1,5 @@
 function Get-ManagerReleaseDirectory {
-    param([ValidatePattern('^\d+\.\d+\.\d+(?:-experimental)?$')][string]$Version='0.9.2-experimental')
+    param([ValidatePattern('^\d+\.\d+\.\d+(?:-experimental)?$')][string]$Version='0.9.4-experimental')
     $projectRoot=Split-Path -Parent $PSScriptRoot
     $candidates=@(
         (Join-Path $projectRoot ('artifacts\releases\'+$Version+'\windows')),

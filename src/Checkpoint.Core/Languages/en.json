@@ -183,6 +183,7 @@
     "external.connect": "Connect to running game",
     "external.enable": "Select Live Mode first.",
     "external.connecting": "Connecting to the game…",
+    "external.connection_failed": "Live Mode connection failed: {0}.",
     "external.initializing": "Waiting for the game to finish starting…",
     "external.connected": "Restart the game with the manager open to use Live Mode.",
     "external.live_connected": "Supermedo Live Mode ready. F5 saves · F9 restores · F11 opens the picker.",

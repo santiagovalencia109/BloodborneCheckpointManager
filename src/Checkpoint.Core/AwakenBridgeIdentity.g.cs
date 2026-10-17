@@ -1,2 +1,2 @@
 namespace Checkpoint.Core;
-internal static class AwakenBridgeIdentity { internal const string Sha256="4A3F7FE7EDAA05324B6027A2CD1354C968F4CF1CA718A602555B0086A85399AE"; }
+internal static class AwakenBridgeIdentity { internal const string Sha256="CA96A3A10A77B4FB804B815B5A3055FF415F2126162CF2169638131A9A06FBEE"; }

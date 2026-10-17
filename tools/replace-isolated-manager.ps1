@@ -1,5 +1,5 @@
 param([Parameter(Mandatory=$true)][string]$FixtureRoot,
-      [ValidatePattern('^\d+\.\d+\.\d+-experimental$')][string]$Version='0.9.2-experimental')
+      [ValidatePattern('^\d+\.\d+\.\d+-experimental$')][string]$Version='0.9.4-experimental')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ReleasePaths.ps1')
 $project=Split-Path -Parent $PSScriptRoot

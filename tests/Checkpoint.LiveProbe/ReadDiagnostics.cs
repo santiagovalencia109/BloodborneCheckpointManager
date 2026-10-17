@@ -9,7 +9,9 @@ internal static class ReadDiagnostics
     [DllImport("kernel32.dll",SetLastError=true)] private static extern bool ReadProcessMemory(SafeProcessHandle handle,nint at,byte[] bytes,nuint size,out nuint read);
     public static void Inspect(string profileFile)
     {
-        var p=JsonDisk.Read<Profile>(profileFile); var game=ExternalBridge.Discover(port:p.Port).Single();
+        var p=JsonDisk.Read<Profile>(profileFile); var games=ExternalBridge.Discover(port:p.Port);
+        if(games.Length!=1) { Console.WriteLine($"Read-only diagnosis needs one running {p.Port} game; found {games.Length}."); return; }
+        var game=games[0];
         var r=ExternalBridge.ResolveRuntime(game.Executable,p.Port); using var process=Process.GetProcessById(game.Pid);
         using var handle=OpenProcess(0x10|0x1000,false,game.Pid); if(handle.IsInvalid) throw new IOException("Read-only process open failed");
         var host=process.MainModule!.BaseAddress;

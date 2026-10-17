@@ -123,6 +123,7 @@ static AttachMain attachMain;
 static bool GameVerified();
 static void MainAttach() {
     attachMain();
+    if(tickReady.load()) return;
     // probe has now protected executable guest segments. Earlier in GPU startup
     // they are writable data, so installing a guest-code hook there is invalid.
     // Recheck after the launcher's community patches and native binding relocations.
@@ -130,16 +131,20 @@ static void MainAttach() {
     if(!GameVerified()) { tickStatus=-102; return; }
     // Awaken reserves the surrounding guest address space, so a near MinHook
     // relay cannot be allocated. Install the reviewed absolute jump before guest execution.
-    if(InstallStartupTick(reinterpret_cast<void*>(image+0x2034770),reinterpret_cast<void*>(&BcmTickHook),&BcmTickOriginal)) {
+    if(InstallStartupTick(reinterpret_cast<void*>(image+0x2034770),reinterpret_cast<void*>(&BcmTickHook),&BcmTickOriginal,host)) {
         tickStatus=0; tickReady=true;
     } else tickStatus=-103;
 }
 std::string StartupStatus() {
     const int status=tickStatus.load();
+    if(status==-100 && Field<int>(host,runtime::At(runtime::Entered)))
+        return "The game passed the startup connection boundary. Restart it with the manager open";
     return status==-100 ? "Waiting for the runtime startup boundary" : status==-101 ? "Checking guest startup code" :
         status==-102 ? "Guest code changed at the startup boundary" : status==-103 ? "Could not install the startup tick detour" : std::string("Tick activation: ")+MH_StatusToString(MH_STATUS(status));
 }
 bool Ready() { return installed.load() && tickReady.load(); }
+bool Starting() { return installed.load() && !tickReady.load() && tickStatus.load()>=-101 &&
+    Field<int>(host,runtime::At(runtime::Entered))==0; }
 static int32_t SYSV ReadState(int32_t handle,unsigned char* data) {
     ++padDepth; const auto status=padState(handle,data); --padDepth;
     if (!padDepth && !status) Filter(data); return status;
@@ -236,7 +241,7 @@ bool Acquire(bool restoring) {
 }
 static bool GameVerified() {
     return Bytes(0x1336da0,{0x55,0x48,0x89,0xe5,0x48,0x8d,0x05,0x1d,0x43,0x20,0x04,0x48,0x83,0x38,0x00,0x75}) &&
-        Bytes(0x2034770,{0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x38}) &&
+        (VerifiedAwakenFrame(reinterpret_cast<void*>(image+0x2034770),host) || Bytes(0x2034770,{0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x38})) &&
         Bytes(0x14d9e80,{0x53,0x81,0xe6,0x00,0x00,0x00,0xf0,0x81,0xe2,0xff,0xff,0xff,0x0f}) &&
         Bytes(0x17c13ce,{0x48,0x8d,0x1d,0x33,0x9d,0xd7,0x03,0x48,0x8b,0x03,0x48,0x85,0xc0,0x75,0x24}) &&
         Bytes(0x17c13fe,{0x48,0x8b,0x03,0x48,0x8b,0x40,0x10,0xc7,0x40,0x08,0x02,0x00,0x00,0x00});
@@ -307,7 +312,17 @@ bool Install(uintptr_t base,std::string& error) {
     if (ok) ok=hook(reinterpret_cast<void*>(lookup(host+runtime::At(runtime::PadTable),runtime::At(runtime::PadCount),"scePadReadState")),reinterpret_cast<void*>(&ReadState),reinterpret_cast<void**>(&padState));
     if (ok) ok=hook(reinterpret_cast<void*>(lookup(host+runtime::At(runtime::PadTable),runtime::At(runtime::PadCount),"scePadRead")),reinterpret_cast<void*>(&ReadPad),reinterpret_cast<void**>(&padRead));
     if (ok) ok=hook(reinterpret_cast<void*>(host+runtime::At(runtime::MainAttach)),reinterpret_cast<void*>(&MainAttach),reinterpret_cast<void**>(&attachMain));
-    if (ok) { auto status=MH_EnableHook(MH_ALL_HOOKS); ok=status==MH_OK; if (!ok) error=std::string("Hook activation: ")+MH_StatusToString(status); }
+    if (ok) {
+        auto status=MH_EnableHook(MH_ALL_HOOKS);
+        // The conservative thread freezer can encounter an exiting startup worker.
+        // Retry only before guest entry; every attempt still suspends and checks all threads.
+        for(unsigned retry=0; status==MH_ERROR_MEMORY_ALLOC && retry<3 &&
+            !Field<int>(host,runtime::At(runtime::Entered)); ++retry) {
+            Sleep(10); status=MH_EnableHook(MH_ALL_HOOKS);
+        }
+        ok=status==MH_OK;
+        if (!ok) error=std::string("Hook activation: ")+MH_StatusToString(status);
+    }
     if (!ok) {
         if (MH_DisableHook(MH_ALL_HOOKS)==MH_OK) { for (auto target:targets) MH_RemoveHook(target); MH_Uninitialize(); }
         error+="; live operations remain disabled"; return false;

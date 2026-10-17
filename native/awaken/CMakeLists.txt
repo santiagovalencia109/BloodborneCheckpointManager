@@ -19,3 +19,8 @@ add_executable(test_startup_detour test_startup_detour.cpp)
 target_compile_features(test_startup_detour PRIVATE cxx_std_17)
 target_link_options(test_startup_detour PRIVATE -static)
 add_test(NAME awaken_startup_detour COMMAND test_startup_detour)
+
+add_executable(test_engine_chain test_engine_chain.cpp)
+target_compile_features(test_engine_chain PRIVATE cxx_std_17)
+target_link_options(test_engine_chain PRIVATE -static)
+add_test(NAME awaken_engine_chain COMMAND test_engine_chain)
