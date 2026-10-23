@@ -5,8 +5,9 @@ using System.Text.Json;
 
 namespace Checkpoint.Core;
 
+/// <param name="Reviewed">True for a reviewed contract or exact build; false for the structural fallback.</param>
 public sealed record RuntimeResolution(string Family, string Sha256, uint[] Layout,
-    IReadOnlyList<RuntimeCodeCheck> Code);
+    IReadOnlyList<RuntimeCodeCheck> Code, bool Reviewed=true);
 public sealed record RuntimeCodeCheck(uint Rva, int Length, int[] Masks, string Sha256);
 
 /// <summary>Resolve COFF names and validate relocation-independent runtime ABI shapes.

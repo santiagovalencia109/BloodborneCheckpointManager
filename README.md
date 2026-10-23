@@ -2,7 +2,7 @@
 
 Create checkpoints of your save and return to them whenever you want to retry a fight or recover your saved progress and consumables.
 
-Works with [Supermedo](https://github.com/Supermedo/bloodborne_pc) and [Awaken / BloodBorneButPc](https://github.com/Awakenchan/BloodBorneButPc), on Windows x64 in single-player mode. Some port updates may require a manager update.
+Works with [Supermedo](https://github.com/Supermedo/bloodborne_pc) and [Awaken / BloodBorneButPc](https://github.com/Awakenchan/BloodBorneButPc), on Windows x64 in single-player mode. Port updates that only change the port's internal code are accepted automatically through a [structural check](docs/STRUCTURAL_FALLBACK.md).
 
 Supermedo 1.8.2 and Awaken 0.9.33. Awaken support remains experimental; see [Awaken support](docs/AWAKEN.md) for its current limits.
 
@@ -48,7 +48,7 @@ You can also create, restore, rename and delete checkpoints from the manager win
 
 Change the interface language under **Language**. To add a translation, see the [translation guide](docs/TRANSLATING.md).
 
-See the documentation for [build instructions](docs/EXTERNAL_BRIDGE_USAGE.md#build) and [compatibility details](docs/ADAPTIVE_DETECTION.md).
+The manager checks GitHub Releases for new versions and can update itself. See the documentation for [build and release instructions](docs/BUILD_AND_RELEASE.md) and [compatibility details](docs/ADAPTIVE_DETECTION.md).
 
 ## Source code
 

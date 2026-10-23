@@ -239,6 +239,21 @@
     "mode.awaken": "Awaken Live Mode",
     "settings.port": "Game port",
     "external.awaken_connected": "Awaken Live Mode ready. F5 saves · F9 restores · F11 opens the picker.",
-    "settings.mode_awaken": "Awaken Live Mode"
+    "settings.mode_awaken": "Awaken Live Mode",
+    "ui.settings_saved_structural": "Settings saved. This port version has not been reviewed yet, so its compatibility was confirmed from the runtime's structure. An emergency backup is still made before every restore.",
+    "external.structural_note": "(Unreviewed port version: structural compatibility.)",
+    "settings.check_updates": "Check for updates",
+    "update.available_link": "Update v{0} available",
+    "update.title": "Manager update",
+    "update.confirm": "Version {0} is available (you have {1}).\n\n{2}\n\nDownload and install it now? The manager will close, update itself and open again. Your checkpoints and settings are kept.",
+    "update.none": "You have the latest version (v{0}).",
+    "update.checking": "Checking for updates…",
+    "update.downloading": "Downloading update… {0}%",
+    "update.restarting": "Installing the update and restarting…",
+    "update.failed": "Could not update: {0}",
+    "update.game_running": "Close the game before updating. It keeps this manager's bridge DLL in use.",
+    "update.not_writable": "The manager folder can't be written ({0}). Download the update from the release page that just opened and extract it over this folder.",
+    "update.no_checksum": "This release has no published checksum, so it won't be installed automatically. Download it from the release page that just opened.",
+    "ui.saves_parent": "This is the folder above the saves. Select its savedata folder instead: {0}"
   }
 }

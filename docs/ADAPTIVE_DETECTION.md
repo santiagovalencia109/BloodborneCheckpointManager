@@ -1,5 +1,7 @@
 # Adaptive runtime detection — 0.7 experimental
 
+**0.9.5:** when no reviewed contract matches, the manager falls back to a [structural check](STRUCTURAL_FALLBACK.md) of only what the bridge uses.
+
 **Current behavior (0.8.4):** file/save code retains strict implementation checks (100 or 108 functions). Input is checked through the public Orbis ABI and executable export targets, so private keyboard/parser changes no longer require matching bytecode. See [0.8.4 details and validation](UPDATE_0_8_4.md). The 0.7 counts and pad helper checks below describe the earlier implementation.
 
 This replaces the whole-executable identity requirement for the Supermedo C runtime family. The original exact-hash 4AE2D15E build retains its verified legacy profile. The installed 000C7C9B build is resolved through the adaptive contract; there is no allowlist entry for its whole-file hash. File hashes remain integrity/identity checks during attachment, not compatibility decisions.

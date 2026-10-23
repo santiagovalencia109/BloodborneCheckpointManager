@@ -1,39 +1,110 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "startup_detour.h"
 #include <cstdio>
+#include <vector>
+
+// Stub headers exactly as emitted by Awaken 0.9.33 (EmitPrologueStub) and by the following build
+// (WriteStub). The callback pointer is patched in at the given offset.
+static const unsigned char kHeaderV1[]={
+    0x57,0x56,0x52,0x51,0x41,0x50,0x41,0x51,0x48,0x81,0xec,0x88,0x00,0x00,0x00,0xf3,
+    0x0f,0x7f,0x44,0x24,0x00,0xf3,0x0f,0x7f,0x4c,0x24,0x10,0xf3,0x0f,0x7f,0x54,0x24,
+    0x20,0xf3,0x0f,0x7f,0x5c,0x24,0x30,0xf3,0x0f,0x7f,0x64,0x24,0x40,0xf3,0x0f,0x7f,
+    0x6c,0x24,0x50,0xf3,0x0f,0x7f,0x74,0x24,0x60,0xf3,0x0f,0x7f,0x7c,0x24,0x70,0x48,
+    0xc7,0x84,0x24,0x80,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x48,0x8d,0xb4,0x24,0x88,
+    0x00,0x00,0x00,0x48,0xbf,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x48,0xb8,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xff,0xd0,0x49,0x89,0xc3,0x4c,0x8b,0x94,0x24,
+    0x80,0x00,0x00,0x00,0xf3,0x0f,0x6f,0x44,0x24,0x00,0xf3,0x0f,0x6f,0x4c,0x24,0x10,
+    0xf3,0x0f,0x6f,0x54,0x24,0x20,0xf3,0x0f,0x6f,0x5c,0x24,0x30,0xf3,0x0f,0x6f,0x64,
+    0x24,0x40,0xf3,0x0f,0x6f,0x6c,0x24,0x50,0xf3,0x0f,0x6f,0x74,0x24,0x60,0xf3,0x0f,
+    0x6f,0x7c,0x24,0x70,0x48,0x81,0xc4,0x88,0x00,0x00,0x00,0x41,0x59,0x41,0x58,0x59,
+    0x5a,0x5e,0x5f,0x4d,0x85,0xdb,0x74,0x04,0x4c,0x89,0xd0,0xc3};
+static const unsigned char kHeaderV2[]={
+    0x57,0x56,0x52,0x51,0x41,0x50,0x41,0x51,0x48,0x81,0xec,0x98,0x00,0x00,0x00,0x48,
+    0x89,0x84,0x24,0x88,0x00,0x00,0x00,0x0f,0x11,0x44,0x24,0x00,0x0f,0x11,0x4c,0x24,
+    0x10,0x0f,0x11,0x54,0x24,0x20,0x0f,0x11,0x5c,0x24,0x30,0x0f,0x11,0x64,0x24,0x40,
+    0x0f,0x11,0x6c,0x24,0x50,0x0f,0x11,0x74,0x24,0x60,0x0f,0x11,0x7c,0x24,0x70,0x48,
+    0xc7,0x84,0x24,0x90,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x31,0xff,0x48,0x8d,0xb4,
+    0x24,0x98,0x00,0x00,0x00,0x48,0xb8,0x43,0x41,0x4c,0x4c,0x42,0x41,0x43,0x4b,0xff,
+    0xd0,0x48,0x85,0xc0,0x74,0x18,0x48,0x8b,0x84,0x24,0x90,0x00,0x00,0x00,0x48,0x81,
+    0xc4,0x98,0x00,0x00,0x00,0x41,0x59,0x41,0x58,0x59,0x5a,0x5e,0x5f,0xc3,0x0f,0x10,
+    0x44,0x24,0x00,0x0f,0x10,0x4c,0x24,0x10,0x0f,0x10,0x54,0x24,0x20,0x0f,0x10,0x5c,
+    0x24,0x30,0x0f,0x10,0x64,0x24,0x40,0x0f,0x10,0x6c,0x24,0x50,0x0f,0x10,0x74,0x24,
+    0x60,0x0f,0x10,0x7c,0x24,0x70,0x48,0x8b,0x84,0x24,0x88,0x00,0x00,0x00,0x48,0x81,
+    0xc4,0x98,0x00,0x00,0x00,0x41,0x59,0x41,0x58,0x59,0x5a,0x5e,0x5f};
+struct Format { const unsigned char* header; size_t size, callback; const char* name; };
+static const Format kFormats[]={{kHeaderV1,sizeof(kHeaderV1),95,"0.9.33"},{kHeaderV2,sizeof(kHeaderV2),0x57,"WriteStub"}};
+
+static unsigned calls;
+__attribute__((sysv_abi,noinline)) static long long Callback(unsigned long long,const unsigned long long*) { ++calls; return 0; }
 static void* original;
 static int Replacement() { return reinterpret_cast<int(*)()>(original)()+1; }
-int main() {
+static DWORD old;
+static void Writable(void* p) { VirtualProtect(p,4096,PAGE_READWRITE,&old); }
+static void Executable(void* p) { VirtualProtect(p,4096,PAGE_EXECUTE_READ,&old); }
+
+static std::vector<unsigned char> Stub(const Format& f,uintptr_t callback,uintptr_t resume) {
+    std::vector<unsigned char> code(f.header,f.header+f.size);
+    std::memcpy(code.data()+f.callback,&callback,8);
+    code.insert(code.end(),std::begin(awaken_frame::kPrologue),std::end(awaken_frame::kPrologue));
+    const unsigned char jump[]={0xff,0x25,0,0,0,0}; code.insert(code.end(),jump,jump+6);
+    code.resize(code.size()+8); std::memcpy(code.data()+code.size()-8,&resume,8);
+    return code;
+}
+
+static int Run(const Format& f) {
+    const auto host=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+    const auto callback=reinterpret_cast<uintptr_t>(&Callback);
     auto page=static_cast<unsigned char*>(VirtualAlloc(nullptr,4096,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
     auto stub=static_cast<unsigned char*>(VirtualAlloc(nullptr,4096,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
-    auto callback=static_cast<unsigned char*>(VirtualAlloc(nullptr,4096,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
-    if(!page || !stub || !callback) return 1;
-    unsigned calls=0;
-    // Synthetic callback with the reviewed entry and a visible effect.
-    const unsigned char begin[]={0x55,0x41,0x57,0x41,0x56,0x41,0x54,0x53,0x48,0x83,0xec,0x40,0x48,0x8d,0x6c,0x24,0x40,0x48,0xb8};
-    std::memcpy(callback,begin,sizeof(begin)); auto counter=reinterpret_cast<uintptr_t>(&calls); std::memcpy(callback+sizeof(begin),&counter,8);
-    const unsigned char end[]={0xff,0x00,0x48,0x83,0xc4,0x40,0x5b,0x41,0x5c,0x41,0x5e,0x41,0x5f,0x5d,0x31,0xc0,0xc3};
-    std::memcpy(callback+sizeof(begin)+8,end,sizeof(end));
-    const auto host=reinterpret_cast<uintptr_t>(callback)-0x119f80;
-    auto bytes=AwakenFrameStub(host,reinterpret_cast<uintptr_t>(page)+17); std::memcpy(stub,bytes.data(),bytes.size());
+    auto data=static_cast<unsigned char*>(VirtualAlloc(nullptr,4096,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE));
+    if(!page || !stub || !data) return 1;
+    const auto bytes=Stub(f,callback,reinterpret_cast<uintptr_t>(page)+17); std::memcpy(stub,bytes.data(),bytes.size());
     const unsigned char body[]={0x48,0x83,0xc4,0x38,0x5b,0x41,0x5c,0x41,0x5d,0x41,0x5e,0x41,0x5f,0x5d,0xb8,42,0,0,0,0xc3};
     std::memcpy(page+17,body,sizeof(body));
     const unsigned char jump[]={0xff,0x25,0,0,0,0}; std::memcpy(page,jump,6);
     const auto destination=reinterpret_cast<uintptr_t>(stub); std::memcpy(page+6,&destination,8); std::memset(page+14,0xcc,3);
-    DWORD old=0; VirtualProtect(callback,4096,PAGE_EXECUTE_READ,&old); VirtualProtect(stub,4096,PAGE_EXECUTE_READ,&old); VirtualProtect(page,4096,PAGE_EXECUTE_READ,&old);
+    Executable(stub); Executable(page);
+    calls=0;
     if(VerifiedAwakenFrame(page,host)!=stub) return 2;
     if(reinterpret_cast<int(*)()>(page)()!=42 || calls!=1) return 3;
-    // Every emitted opcode, including the callback and return destination, is checked.
-    for(size_t n=0;n<bytes.size();++n) {
-        VirtualProtect(stub,4096,PAGE_READWRITE,&old); stub[n]^=1; VirtualProtect(stub,4096,PAGE_EXECUTE_READ,&old);
-        if(VerifiedAwakenFrame(page,host)) return 4;
+
+    auto rejects=[&](auto mutate,auto restore) {
+        Writable(stub); Writable(page); mutate(); Executable(stub); Executable(page);
         void* rejected=nullptr;
-        if(InstallStartupTick(page,reinterpret_cast<void*>(&Replacement),&rejected,host) || rejected) return 5;
-        VirtualProtect(stub,4096,PAGE_READWRITE,&old); stub[n]^=1; VirtualProtect(stub,4096,PAGE_EXECUTE_READ,&old);
-    }
-    if(!InstallStartupTick(page,reinterpret_cast<void*>(&Replacement),&original,host) || original!=stub) return 6;
-    if(reinterpret_cast<int(*)()>(page)()!=43 || calls!=2) return 7;
-    if(reinterpret_cast<int(*)()>(original)()!=42 || calls!=3) return 8;
-    VirtualFree(page,0,MEM_RELEASE); VirtualFree(stub,0,MEM_RELEASE); VirtualFree(callback,0,MEM_RELEASE);
-    std::puts("PASS: verified engine chain retains its callback and original; all 219 altered bytes rejected"); return 0;
+        const bool ok=!VerifiedAwakenFrame(page,host) && !InstallStartupTick(page,reinterpret_cast<void*>(&Replacement),&rejected,host) && !rejected;
+        Writable(stub); Writable(page); restore(); Executable(stub); Executable(page);
+        return ok;
+    };
+    // Every byte of the displaced prologue, the resume jump and its destination is checked.
+    for(size_t n=f.size;n<bytes.size();++n)
+        if(!rejects([&]{ stub[n]^=1; },[&]{ stub[n]^=1; })) return 4;
+    // The saved-register sequence that starts the stub is checked.
+    for(size_t n=0;n<sizeof(awaken_frame::kSaves);++n)
+        if(!rejects([&]{ stub[n]^=1; },[&]{ stub[n]^=1; })) return 5;
+    // The callback must be code inside the engine image: not private memory, not data.
+    const auto foreign=reinterpret_cast<uintptr_t>(data), global=reinterpret_cast<uintptr_t>(&calls);
+    for(auto target:{foreign,global,uintptr_t(0)})
+        if(!rejects([&]{ std::memcpy(stub+f.callback,&target,8); },[&]{ std::memcpy(stub+f.callback,&callback,8); })) return 6;
+    // The patched entry must be the exact absolute jump with int3 padding.
+    for(size_t n=0;n<17;++n) if(n<6 || n>=14)
+        if(!rejects([&]{ page[n]^=1; },[&]{ page[n]^=1; })) return 7;
+    // A second complete tail makes the stub ambiguous.
+    const size_t tail=bytes.size()-f.size;
+    if(!rejects([&]{ std::memcpy(stub+bytes.size(),stub+f.size,tail); },[&]{ std::memset(stub+bytes.size(),0,tail); })) return 8;
+    // Writable stub memory is never followed.
+    VirtualProtect(stub,4096,PAGE_EXECUTE_READWRITE,&old);
+    if(VerifiedAwakenFrame(page,host)) return 9;
+    Executable(stub);
+
+    if(!InstallStartupTick(page,reinterpret_cast<void*>(&Replacement),&original,host) || original!=stub) return 10;
+    if(reinterpret_cast<int(*)()>(page)()!=43 || calls!=2) return 11;
+    if(reinterpret_cast<int(*)()>(original)()!=42 || calls!=3) return 12;
+    VirtualFree(page,0,MEM_RELEASE); VirtualFree(stub,0,MEM_RELEASE); VirtualFree(data,0,MEM_RELEASE);
+    std::printf("PASS %s: chain keeps callback and original; tail, saves, callback and entry mutations rejected\n",f.name);
+    return 0;
+}
+
+int main() {
+    for(auto& f:kFormats) if(int status=Run(f)) { std::printf("FAIL %s: %d\n",f.name,status); return status; }
+    return 0;
 }

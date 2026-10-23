@@ -128,6 +128,91 @@ Test("Public input export targets must be executable functions", dir =>
     BitConverter.GetBytes(0x140003080UL).CopyTo(fixture.Bytes,0x1558);
     Fails(()=>RuntimeContract.ResolveBytes(fixture.Bytes,fixture.Contract));
 });
+Test("Structural fallback resolves a port update from the code that owns the file table", dir =>
+{
+    var r=StructuralRuntime.ResolveBytes(StructuralFixture.Create(),Ports.Supermedo);
+    Assert(!r.Reviewed && r.Family=="supermedo-structural-v1" && r.Layout.Length==26);
+    Assert(r.Layout[0]==StructuralFixture.Image && r.Layout[3]==StructuralFixture.Root && r.Layout[4]==StructuralFixture.Lock && r.Layout[5]==StructuralFixture.Files);
+    Assert(r.Layout[18]==StructuralFixture.FileTable && r.Layout[19]==37 && r.Layout[20]==StructuralFixture.SaveTable && r.Layout[21]==14);
+    Assert(r.Layout[22]==StructuralFixture.PadTable && r.Layout[23]==3 && r.Layout[24]==0x230 && r.Layout[25]==32);
+    Assert(r.Layout.Take(18).All(v=>v!=0) && r.Code.Count>0);
+    // Private implementation bytes change between port builds; the bridge-facing structure does not.
+    var changed=StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(Filler:0xcc)),Ports.Supermedo);
+    Assert(changed.Layout.SequenceEqual(r.Layout) && changed.Sha256!=r.Sha256);
+    var legacy=StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(Stride:0x218)),Ports.Supermedo);
+    Assert(legacy.Layout[24]==0x218 && legacy.Layout[25]==24);
+});
+Test("Structural fallback separates repeated globals by the code that uses them", dir =>
+{
+    var r=StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(SecondImage:true)),Ports.Supermedo);
+    Assert(r.Layout[0]==StructuralFixture.Image);
+    Fails(()=>StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(SecondImage:true,AnchorImage:false)),Ports.Supermedo));
+});
+Test("Structural fallback fails closed on unknown records, ambiguous locks and missing interface", dir =>
+{
+    Fails(()=>StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(Stride:0x240)),Ports.Supermedo));
+    Fails(()=>StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(SecondLock:true)),Ports.Supermedo));
+    Fails(()=>StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(DropExport:true)),Ports.Supermedo));
+    Fails(()=>StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(DropHelper:true)),Ports.Supermedo));
+    Fails(()=>StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(ReadOnlyFiles:true)),Ports.Supermedo));
+    Fails(()=>StructuralRuntime.ResolveBytes([1,2,3],Ports.Supermedo));
+    var stripped=StructuralFixture.Create(); BitConverter.GetBytes(0u).CopyTo(stripped,0x90);
+    Fails(()=>StructuralRuntime.ResolveBytes(stripped,Ports.Supermedo));
+});
+Test("Structural Awaken fallback uses SRW locks, LTO names and only the remaining host helpers", dir =>
+{
+    var r=StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(Awaken:true,Stride:0x218)),Ports.Awaken);
+    Assert(!r.Reviewed && r.Family=="awaken-structural-v1" && r.Layout[4]==StructuralFixture.Lock && r.Layout[5]==StructuralFixture.Files);
+    Assert(r.Layout[11..17].All(v=>v==0) && r.Layout[8]!=0 && r.Layout[9]!=0 && r.Layout[10]!=0 && r.Layout[24]==0x218 && r.Layout[25]==24);
+    // Awaken after 0.9.33: 552-byte records with the path at 36. Supermedo's bridge does not accept that layout.
+    var updated=StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(Awaken:true,Stride:0x228)),Ports.Awaken);
+    Assert(updated.Layout[24]==0x228 && updated.Layout[25]==36);
+    Fails(()=>StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(Stride:0x228)),Ports.Supermedo));
+    Fails(()=>StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(Awaken:true,Stride:0x230)),Ports.Awaken));
+    // A Supermedo-shaped runtime is not an Awaken runtime and vice versa.
+    Fails(()=>StructuralRuntime.ResolveBytes(StructuralFixture.Create(),Ports.Awaken));
+    Fails(()=>StructuralRuntime.ResolveBytes(StructuralFixture.Create(new(Awaken:true,Stride:0x218)),Ports.Supermedo));
+});
+Test("Runtime resolution prefers reviewed contracts and reports both failures", dir =>
+{
+    var path=Path.Combine(dir,"bb-probe.exe"); File.WriteAllBytes(path,StructuralFixture.Create());
+    Assert(!ExternalBridge.ResolveRuntime(path,Ports.Supermedo).Reviewed);
+    File.WriteAllBytes(path,[1,2,3]);
+    try { ExternalBridge.ResolveRuntime(path,Ports.Supermedo); throw new Exception("Expected failure"); }
+    catch(IOException ex) { Assert(ex.Message.Contains("Structural check:")); }
+});
+Test("Updater picks the newest published Windows package and ignores drafts, older and malformed releases", dir =>
+{
+    string Asset(string v,bool signed=true)=>$$"""{"name":"BloodborneCheckpointManager-v{{v}}-windows.zip","size":1234,"browser_download_url":"https://github.com/santiagovalencia109/BloodborneCheckpointManager/releases/download/v{{v}}/BloodborneCheckpointManager-v{{v}}-windows.zip"{{(signed ? ",\"digest\":\"sha256:"+new string('a',64)+"\"" : "")}}}""";
+    string Release(string v,bool draft=false,string? assets=null)=>$$"""{"tag_name":"v{{v}}","name":"BCM {{v}}","body":"notes {{v}}","html_url":"https://github.com/x","draft":{{(draft ? "true" : "false")}},"assets":[{{assets ?? Asset(v)}}]}""";
+    var json="["+string.Join(",",Release("0.9.4-experimental"),Release("0.10.1-experimental",draft:true),Release("0.10.0-experimental"),
+        Release("0.9.9-experimental",assets:""),Release("nightly"),Release("0.9.6-experimental"))+"]";
+    var best=Updater.SelectNewest(json,"0.9.5-experimental")!;
+    Assert(best.Version=="0.10.0-experimental" && best.Sha256==new string('A',64) && best.ZipSize==1234 && best.Notes=="notes 0.10.0-experimental");
+    Assert(Updater.SelectNewest(json,"0.10.0-experimental")==null && Updater.SelectNewest("[]","0.9.5")==null);
+    Assert(Updater.Compare("0.10.0-experimental","0.9.9")>0 && Updater.Compare("v1.0.0","1.0.0-experimental")==0);
+    // A download URL outside this repository is never accepted.
+    var foreign=Release("0.11.0-experimental").Replace("https://github.com/santiagovalencia109/","https://example.com/");
+    Assert(Updater.SelectNewest("["+foreign+"]","0.9.5")==null);
+    // Without GitHub's digest the release is listed, but installing requires a checksum.
+    var unsigned=Updater.SelectNewest("["+Release("0.12.0-experimental",assets:Asset("0.12.0-experimental",signed:false))+"]","0.9.5")!;
+    Assert(unsigned.Sha256==null);
+    try { Updater.DownloadAsync(new HttpClient(),unsigned,dir,null,CancellationToken.None).GetAwaiter().GetResult(); throw new Exception("Expected failure"); }
+    catch(UpdateException ex) { Assert(ex.Key=="update.no_checksum"); }
+});
+Test("Update packages extract without path traversal and must contain the manager and both bridges", dir =>
+{
+    var zip=Path.Combine(dir,"good.zip");
+    using(var archive=System.IO.Compression.ZipFile.Open(zip,System.IO.Compression.ZipArchiveMode.Create))
+        foreach(var file in Updater.RequiredFiles) using(var w=new StreamWriter(archive.CreateEntry(file).Open())) w.Write(file);
+    var target=Path.Combine(dir,"good"); Updater.ExtractSafely(zip,target); Updater.ValidatePackage(target);
+    File.Delete(Path.Combine(target,"Native","bcm-awaken.dll")); Fails(()=>Updater.ValidatePackage(target));
+    var evil=Path.Combine(dir,"evil.zip");
+    using(var archive=System.IO.Compression.ZipFile.Open(evil,System.IO.Compression.ZipArchiveMode.Create))
+        using(var w=new StreamWriter(archive.CreateEntry("../outside.txt").Open())) w.Write("x");
+    Fails(()=>Updater.ExtractSafely(evil,Path.Combine(dir,"evil")));
+    Assert(!File.Exists(Path.Combine(dir,"outside.txt")) && Updater.IsWritable(dir));
+});
 if(args.Contains("--contract-only")) { Console.WriteLine($"{passed} contract checks passed."); return; }
 
 Test("Older profiles keep external attachment disabled; explicit preference roundtrips", dir =>

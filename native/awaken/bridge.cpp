@@ -227,7 +227,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI BcmStart(void* payload) {
                 if (!config.layout[n] || config.layout[n]>256) return 17;
             } else if (n==runtime::FileStride || n==runtime::FilePathOffset) {
                 const auto stride=config.layout[runtime::FileStride], path=config.layout[runtime::FilePathOffset];
-                if (!((stride==0x218 && path==24) || (stride==0x230 && path==32))) return 17;
+                if (!((stride==0x218 && path==24) || (stride==0x230 && path==32) || (stride==0x228 && path==36))) return 17; // 0x228/36: Awaken after 0.9.33
             } else if(n>=runtime::Pread && n<=runtime::Getdents) {
                 if(config.layout[n]!=0) return 17; // Removed by this reviewed LTO ABI.
             } else if (!config.layout[n] || config.layout[n]>=nt->OptionalHeader.SizeOfImage) return 17;

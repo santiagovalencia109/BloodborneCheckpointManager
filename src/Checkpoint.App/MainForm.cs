@@ -5,6 +5,11 @@ namespace Checkpoint.App;
 
 public sealed class MainForm : Form
 {
+    private readonly LinkLabel updateLink=new() { AutoSize=true, Visible=false, LinkColor=Theme.Gold, ActiveLinkColor=Theme.Gold, VisitedLinkColor=Theme.Gold,
+        LinkBehavior=LinkBehavior.HoverUnderline, Font=new Font("Segoe UI Semibold",9), Margin=new Padding(10,0,0,0) };
+    private ReleaseInfo? availableUpdate;
+    private readonly string buildVersion;
+    private readonly string? dataDirectoryArgument;
     private GlobalShortcuts? shortcuts;
     private DateTime lastShortcutRetry;
     private readonly Label shortcutHint=new() { Dock=DockStyle.Fill,AutoEllipsis=true,ForeColor=Theme.Muted };
@@ -55,7 +60,7 @@ public sealed class MainForm : Form
 
     public MainForm(string? dataDirectory=null,bool preview=false)
     {
-        this.preview=preview;
+        this.preview=preview; dataDirectoryArgument=dataDirectory;
         appData=dataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"BloodborneCheckpointManager");
         Directory.CreateDirectory(appData); UiPreferences.Initialize(appData);
         Text=TextCatalog.T("app.name"); Icon=AppAssets.ApplicationIcon; Size=new Size(1160,850); MinimumSize=new Size(980,740);
@@ -67,9 +72,12 @@ public sealed class MainForm : Form
         var brand=new FlowLayoutPanel { Dock=DockStyle.Fill, FlowDirection=FlowDirection.TopDown, WrapContents=false };
         brand.Controls.Add(new Label { Text="BLOODBORNE", Font=new Font("Georgia",25), ForeColor=Theme.Gold, AutoSize=true, Margin=new Padding(0) });
         brand.Controls.Add(new Label { Text="CHECKPOINT MANAGER", Font=new Font("Segoe UI Semibold",11), AutoSize=true, Margin=new Padding(1,3,0,11) });
-        var buildVersion=System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(MainForm).Assembly)?.InformationalVersion.Split('+')[0]
+        buildVersion=System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(MainForm).Assembly)?.InformationalVersion.Split('+')[0]
             ?? typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "";
-        brand.Controls.Add(new Label { Text="v"+buildVersion, Font=new Font("Segoe UI",9), ForeColor=Theme.Muted, AutoSize=true, Margin=new Padding(1,0,0,0) });
+        var versionRow=new FlowLayoutPanel { AutoSize=true, WrapContents=false, Margin=new Padding(0) };
+        versionRow.Controls.Add(new Label { Text="v"+buildVersion, Font=new Font("Segoe UI",9), ForeColor=Theme.Muted, AutoSize=true, Margin=new Padding(1,0,0,0) });
+        versionRow.Controls.Add(updateLink); updateLink.LinkClicked+=async(_,_)=>await InstallUpdate();
+        brand.Controls.Add(versionRow);
         header.Controls.Add(brand,0,0);
         var preferences=new FlowLayoutPanel { Dock=DockStyle.Fill, FlowDirection=FlowDirection.TopDown, WrapContents=false, Padding=new Padding(8,0,0,0) };
         preferences.Controls.Add(Caption("language.label")); preferences.Controls.Add(languagePicker); mode.Margin=new Padding(0,14,0,0); preferences.Controls.Add(mode); header.Controls.Add(preferences,1,0);
@@ -148,7 +156,7 @@ public sealed class MainForm : Form
         changingLanguage=false;
         languagePicker.SelectedIndexChanged+=(_,_)=>{ if (!changingLanguage && languagePicker.SelectedItem is LanguageChoice c) ChangeLanguage(c.Code); };
         ApplyLanguage();
-        Shown+=async(_,_)=>{ if (!preview && saves.Text.Length>0) await RefreshLibrary(); };
+        Shown+=async(_,_)=>{ if (!preview && saves.Text.Length>0) await RefreshLibrary(); if (!preview) await CheckForUpdates(manual:false); };
         FormClosing+=(_,e)=>{ if(busy) { e.Cancel=true; status.Text=TextCatalog.T("ui.close_busy"); } };
         Disposed+=(_,_)=>{ picker?.Dispose(); rowHeight.Dispose(); rowImage.Dispose(); };
     }
@@ -173,6 +181,7 @@ public sealed class MainForm : Form
         Walk(this); Text=TextCatalog.T("app.name"); search.PlaceholderText=TextCatalog.T("library.search"); name.PlaceholderText=TextCatalog.T("library.name_hint");
         var keys=new[]{"column.name","column.created","column.type","column.size"}; for(int i=0;i<keys.Length;i++) list.Columns[i].Text=TextCatalog.T(keys[i]);
         UpdateMode(); RenderList(); LayoutLibraryActions(); tabs.Invalidate();
+        if(availableUpdate!=null) updateLink.Text=TextCatalog.T("update.available_link",availableUpdate.Version);
         var modeIndex=connectionMode.SelectedIndex;
         changingConnectionMode=true; connectionMode.Items.Clear();
         foreach(var key in new[]{"settings.mode_offline",selectedPort==Ports.Awaken ? "settings.mode_awaken" : "settings.mode_external"}) connectionMode.Items.Add(TextCatalog.T(key));
@@ -232,7 +241,7 @@ public sealed class MainForm : Form
         foreach(var key in new[]{"settings.mode_offline","settings.mode_external"}) connectionMode.Items.Add(TextCatalog.T(key)); connectionMode.SelectedIndex=0;
         var startNote=Caption("settings.start_note"); startNote.MaximumSize=new Size(740,0); startNote.Margin=new Padding(0,8,0,8); fields.Controls.Add(startNote,0,6); fields.SetColumnSpan(startNote,3);
         var actions=new FlowLayoutPanel { AutoSize=true, Dock=DockStyle.Fill, WrapContents=false };
-        actions.Controls.Add(Button("settings.save",SaveSettings,true));
+        actions.Controls.Add(Button("settings.save",SaveSettings,true)); actions.Controls.Add(Button("settings.check_updates",()=>CheckForUpdates(manual:true)));
         fields.Controls.Add(actions,1,7); fields.SetColumnSpan(actions,2);
         layout.Controls.Add(fields,0,1); page.Controls.Add(layout);
     }
@@ -296,7 +305,13 @@ public sealed class MainForm : Form
         recoveryState.Text=TextCatalog.T(pendingRecovery==true ? "recovery.pending" : pendingRecovery==false ? "recovery.none" : "recovery.unknown");
         recoverButton.Enabled=pendingRecovery==true && !busy;
     }
-    private string ExternalStatus(System.Text.Json.JsonElement hello) =>
+    private string ExternalStatus(System.Text.Json.JsonElement hello)
+    {
+        var status=ExternalStatusCore(hello);
+        return hello.TryGetProperty("hostSha256",out var host) && host.GetString() is { } hash && ExternalBridge.IsUnreviewed(hash)
+            ? status+" "+TextCatalog.T("external.structural_note") : status;
+    }
+    private string ExternalStatusCore(System.Text.Json.JsonElement hello) =>
         selectedPort==Ports.Awaken && hello.TryGetProperty("stage",out var state) && state.GetString()=="observer" && hello.TryGetProperty("reason",out var reason) && !string.IsNullOrWhiteSpace(reason.GetString())
             ? TextCatalog.T("external.connection_failed",reason.GetString()!) : TextCatalog.T(
         hello.TryGetProperty("stage",out var stage) && stage.GetString()=="startup" ? "external.initializing" :
@@ -379,9 +394,12 @@ public sealed class MainForm : Form
     {
         _ = Store(p); if (!File.Exists(p.Executable) || !Path.GetExtension(p.Executable).Equals(".exe", StringComparison.OrdinalIgnoreCase)) throw new IOException(TextCatalog.T("ui.executable_missing"));
         if (!Directory.Exists(p.Saves)) throw new IOException(TextCatalog.T("ui.saves_missing"));
+        // A port's user folder holds savedata\ alongside caches and settings; the bridge compares against savedata itself.
+        if (!string.Equals(Path.GetFileName(Path.TrimEndingDirectorySeparator(p.Saves)),"savedata",StringComparison.OrdinalIgnoreCase) && Directory.Exists(Path.Combine(p.Saves,"savedata")))
+            throw new IOException(TextCatalog.T("ui.saves_parent",Path.Combine(p.Saves,"savedata")));
         if (!p.LiveCheckpoints && p.RestartAfterRestore) new WindowsGameLifecycle().ValidateLaunch(p);
-        if(p.LiveCheckpoints) _=ExternalBridge.ResolveRuntime(p.Executable,p.Port);
-        portProfiles.Save(appData,p); return TextCatalog.T("ui.settings_saved");
+        var reviewed=!p.LiveCheckpoints || ExternalBridge.ResolveRuntime(p.Executable,p.Port).Reviewed;
+        portProfiles.Save(appData,p); return TextCatalog.T(reviewed ? "ui.settings_saved" : "ui.settings_saved_structural");
     });
     private Task Create()
     {
@@ -486,6 +504,74 @@ public sealed class MainForm : Form
     {
         if (busy || prompting || !Confirm(TextCatalog.T("ui.recover_confirm"))) return Task.CompletedTask;
         return Execute(p => { Store(p).Recover(); return TextCatalog.T("ui.recovered"); });
+    }
+    private async Task CheckForUpdates(bool manual)
+    {
+        if(preview || busy) return;
+        try
+        {
+            if(manual) status.Text=TextCatalog.T("update.checking");
+            using var http=Updater.CreateClient(buildVersion);
+            availableUpdate=await Updater.CheckAsync(http,buildVersion,CancellationToken.None);
+            updateLink.Visible=availableUpdate!=null;
+            if(availableUpdate!=null)
+            {
+                updateLink.Text=TextCatalog.T("update.available_link",availableUpdate.Version);
+                Log($"Update available: {availableUpdate.Version} ({availableUpdate.PageUrl})");
+            }
+            if(!manual) return;
+            if(availableUpdate!=null) await InstallUpdate(); else status.Text=TextCatalog.T("update.none",buildVersion);
+        }
+        catch(Exception ex) when(ex is HttpRequestException or IOException or TaskCanceledException or System.Text.Json.JsonException or ArgumentException or InvalidOperationException or KeyNotFoundException)
+        {
+            Log("Update check failed: "+ex.Message);
+            if(manual) status.Text=TextCatalog.T("update.failed",ex.Message);
+        }
+    }
+    private async Task InstallUpdate()
+    {
+        var release=availableUpdate;
+        if(release==null || busy || prompting) return;
+        var notes=release.Notes.Length>1500 ? release.Notes[..1500]+"…" : release.Notes;
+        if(!Confirm(TextCatalog.T("update.confirm",release.Version,buildVersion,notes),TextCatalog.T("update.title"))) return;
+        // The game keeps the bridge DLL from this folder loaded; it cannot be replaced while the game runs.
+        var games=System.Diagnostics.Process.GetProcessesByName("bb-probe");
+        var gameRunning=games.Length>0; foreach(var game in games) game.Dispose();
+        if(gameRunning) { AppDialog.Show(this,TextCatalog.T("update.title"),TextCatalog.T("update.game_running")); return; }
+        var install=AppContext.BaseDirectory;
+        if(!Updater.IsWritable(install))
+        {
+            AppDialog.Show(this,TextCatalog.T("update.title"),TextCatalog.T("update.not_writable",install)); OpenReleasePage(release.PageUrl); return;
+        }
+        busy=true; tabs.Enabled=false; languagePicker.Enabled=false; progressBar.Visible=true;
+        var applying=false;
+        try
+        {
+            var updates=Path.Combine(appData,"updates");
+            using var http=Updater.CreateClient(buildVersion);
+            var progress=new Progress<int>(percent=>status.Text=TextCatalog.T("update.downloading",percent));
+            var staging=await Updater.DownloadAsync(http,release,updates,progress,CancellationToken.None);
+            status.Text=TextCatalog.T("update.restarting"); Log($"Installing update {release.Version} from {staging}");
+            Updater.StartApply(staging,install,updates,Path.Combine(appData,"manager.log"),dataDirectoryArgument);
+            applying=true;
+        }
+        catch(UpdateException ex)
+        {
+            status.Text=TextCatalog.T(ex.Key); Log("Update not installed: "+ex.Key);
+            AppDialog.Show(this,TextCatalog.T("update.title"),TextCatalog.T(ex.Key)); OpenReleasePage(release.PageUrl);
+        }
+        catch(Exception ex) when(ex is HttpRequestException or IOException or TaskCanceledException or UnauthorizedAccessException or InvalidDataException or System.ComponentModel.Win32Exception)
+        {
+            status.Text=TextCatalog.T("update.failed",ex.Message); Log("Update failed: "+ex);
+            AppDialog.Show(this,TextCatalog.T("update.title"),TextCatalog.T("update.failed",ex.Message));
+        }
+        finally { busy=false; tabs.Enabled=true; languagePicker.Enabled=true; progressBar.Visible=false; }
+        if(applying) Application.Exit(); // The applier waits for this process to exit, then restarts the manager.
+    }
+    private static void OpenReleasePage(string url)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute=true })?.Dispose(); }
+        catch(Exception ex) when(ex is System.ComponentModel.Win32Exception or InvalidOperationException) { }
     }
     private bool Confirm(string message, string? title = null)
     {

@@ -239,6 +239,21 @@
     "mode.awaken": "Modo en vivo de Awaken",
     "settings.port": "Port del juego",
     "external.awaken_connected": "Modo en vivo de Awaken listo. F5 guarda · F9 restaura · F11 abre el selector.",
-    "settings.mode_awaken": "Modo en vivo de Awaken"
+    "settings.mode_awaken": "Modo en vivo de Awaken",
+    "ui.settings_saved_structural": "Ajustes guardados. Esta versión del port aún no está revisada, así que su compatibilidad se confirmó por la estructura del motor. Se sigue haciendo un respaldo de emergencia antes de cada restauración.",
+    "external.structural_note": "(Versión del port sin revisar: compatibilidad estructural.)",
+    "settings.check_updates": "Buscar actualizaciones",
+    "update.available_link": "Actualización v{0} disponible",
+    "update.title": "Actualización del manager",
+    "update.confirm": "Hay una nueva versión {0} (tienes la {1}).\n\n{2}\n\n¿Descargarla e instalarla ahora? El manager se cerrará, se actualizará y se abrirá de nuevo. Tus checkpoints y ajustes se conservan.",
+    "update.none": "Tienes la última versión (v{0}).",
+    "update.checking": "Buscando actualizaciones…",
+    "update.downloading": "Descargando actualización… {0}%",
+    "update.restarting": "Instalando la actualización y reiniciando…",
+    "update.failed": "No se pudo actualizar: {0}",
+    "update.game_running": "Cierra el juego antes de actualizar. El juego mantiene en uso la DLL del puente de este manager.",
+    "update.not_writable": "No se puede escribir en la carpeta del manager ({0}). Descarga la actualización desde la página que se acaba de abrir y extráela sobre esta carpeta.",
+    "update.no_checksum": "Esta versión no tiene una suma de verificación publicada, así que no se instalará automáticamente. Descárgala desde la página que se acaba de abrir.",
+    "ui.saves_parent": "Esa es la carpeta de arriba de los saves. Elige su carpeta savedata: {0}"
   }
 }

@@ -22,6 +22,9 @@ public static class ExternalBridge
     private const uint Rights = 0x0002 | 0x0008 | 0x0010 | 0x0020 | 0x0400 | 0x100000;
     private static readonly ConcurrentDictionary<(int Pid, long Started), byte> uncertainCalls = new();
     private static readonly ConcurrentDictionary<(string Port,string Path,long Length,long Modified),RuntimeResolution> resolvedFiles=new();
+    private static readonly ConcurrentDictionary<string,byte> unreviewedHosts=new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>True when this runtime build was accepted by the structural fallback rather than a reviewed contract.</summary>
+    public static bool IsUnreviewed(string hostSha256)=>unreviewedHosts.ContainsKey(hostSha256);
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool ReadProcessMemory(SafeProcessHandle process, IntPtr address, byte[] bytes, nuint count, out nuint read);
     [DllImport("kernel32.dll", SetLastError=true)] private static extern SafeProcessHandle OpenProcess(uint access, bool inherit, int pid);
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool IsWow64Process2(SafeProcessHandle process, out ushort machine, out ushort native);
@@ -148,6 +151,16 @@ public static class ExternalBridge
     public static RuntimeResolution ResolveRuntime(string executable,string port=Ports.Supermedo)
     {
         Ports.Validate(port);
+        // Reviewed contracts first; a port update that only changes private implementation details
+        // falls back to the structural check of what the bridge actually uses.
+        IOException reviewed;
+        try { return ResolveReviewed(executable,port); }
+        catch(IOException ex) { reviewed=ex; }
+        try { var structural=StructuralRuntime.Resolve(executable,port); unreviewedHosts[structural.Sha256]=0; return structural; }
+        catch(IOException structural) { throw new IOException(reviewed.Message+" / Structural check: "+structural.Message,structural); }
+    }
+    private static RuntimeResolution ResolveReviewed(string executable,string port)
+    {
         if(port==Ports.Awaken) return AwakenRuntime.Resolve(executable);
         var hash=Fingerprint(executable);
         if(hash==SupportedHostSha256) return new("supermedo-legacy-verified",hash,

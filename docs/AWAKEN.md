@@ -26,7 +26,7 @@ Source review confirms the layout in DarkIzuku's runtime_file.c plus Awaken's pa
 
 The engine reserves nearby guest address space, preventing MinHook from allocating its short-range tick relay. Awaken instead installs a 14-byte absolute jump across an exactly verified 17-byte complete-instruction prologue. The trampoline contains no relative operands and may be allocated anywhere. This happens only inside the reviewed main-thread startup boundary, before linked module initialization and guest entry. Changed bytes are rejected. The separate native tests verify register preservation and original/detour execution. Mid-session first attachment remains unsupported.
 
-**Awaken compatibility currently pins this exact engine build.** Unlike Supermedo, it does not yet have an adaptive LTO contract. A future Awaken update may require review. Do not advertise automatic support for all future releases. Multiplayer and arbitrary injected mods remain unsupported.
+**Since 0.9.5, other Awaken builds go through the [structural check](STRUCTURAL_FALLBACK.md), and bcm-awaken.dll accepts Awaken's frame-hook chain by its structure instead of exact bytes. This includes the build after 0.9.33, with 552-byte file records and the new WriteStub hooks.** Previously, **Awaken compatibility pinned this exact engine build.** Unlike Supermedo, it does not yet have an adaptive LTO contract. A future Awaken update may require review. Do not advertise automatic support for all future releases. Multiplayer and arbitrary injected mods remain unsupported.
 
 ## Build
 

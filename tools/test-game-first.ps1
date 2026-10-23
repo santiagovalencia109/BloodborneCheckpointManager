@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$FixtureRoot,[string]$ManagerVersion="0.9.4-experimental")
+param([Parameter(Mandatory=$true)][string]$FixtureRoot,[string]$ManagerVersion="0.9.5-experimental")
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ReleasePaths.ps1')
 $project=Split-Path -Parent $PSScriptRoot
